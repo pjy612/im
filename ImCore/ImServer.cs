@@ -77,6 +77,7 @@ class ImServer : ImClient
     }
     internal async Task Acceptor(HttpContext context, Func<Task> next)
     {
+        //Console.WriteLine($"context.WebSockets.IsWebSocketRequest:{context.WebSockets.IsWebSocketRequest}");
         if (!context.WebSockets.IsWebSocketRequest) return;
 
         string token = context.Request.Query["token"];
@@ -86,7 +87,7 @@ class ImServer : ImClient
             throw new Exception("授权错误：用户需通过 ImHelper.PrevConnectServer 获得包含 token 的连接");
 
         var data = JsonConvert.DeserializeObject<(Guid clientId, string clientMetaData)>(token_value);
-
+        Console.WriteLine($"客户{data.clientId}接入:{data.clientMetaData}");
         var socket = await context.WebSockets.AcceptWebSocketAsync();
         var cli = new ImServerClient(socket, data.clientId);
         var newid = Guid.NewGuid();
@@ -94,7 +95,7 @@ class ImServer : ImClient
         var wslist = _clients.GetOrAdd(data.clientId, cliid => new ConcurrentDictionary<Guid, ImServerClient>());
         wslist.TryAdd(newid, cli);
         _redis.StartPipe(a => a.HIncrBy($"{_redisPrefix}Online", data.clientId.ToString(), 1).Publish($"evt_{_redisPrefix}Online", token_value));
-
+        Console.WriteLine($"当前客户数：{_clients.Count}");
         var buffer = new byte[BufferSize];
         var seg = new ArraySegment<byte>(buffer);
         try
@@ -114,6 +115,8 @@ class ImServer : ImClient
         await _redis.EvalAsync($"if redis.call('HINCRBY', KEYS[1], '{data.clientId}', '-1') <= 0 then redis.call('HDEL', KEYS[1], '{data.clientId}') end return 1",
             $"{_redisPrefix}Online");
         LeaveChan(data.clientId, GetChanListByClientId(data.clientId));
+        Console.WriteLine($"客户{data.clientId}下线:{data.clientMetaData}");
+        Console.WriteLine($"当前客户数：{_clients.Count}");
         await _redis.PublishAsync($"evt_{_redisPrefix}Offline", token_value);
     }
 
@@ -123,6 +126,7 @@ class ImServer : ImClient
         {
             var data = JsonConvert.DeserializeObject<(Guid senderClientId, Guid[] receiveClientId, string content, bool receipt)>(e.Body);
             Trace.WriteLine($"收到消息：{data.content}" + (data.receipt ? "【需回执】" : ""));
+            Console.WriteLine($"收到需推送消息：{data.content}" + (data.receipt ? "【需回执】" : ""));
 
             var outgoing = new ArraySegment<byte>(Encoding.UTF8.GetBytes(data.content));
             foreach (var clientId in data.receiveClientId)

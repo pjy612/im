@@ -109,7 +109,7 @@ public class ImClient
         var server = SelectServer(clientId);
         var token = $"{Guid.NewGuid()}{Guid.NewGuid()}{Guid.NewGuid()}{Guid.NewGuid()}".Replace("-", "");
         _redis.Set($"{_redisPrefix}Token{token}", JsonConvert.SerializeObject((clientId, clientMetaData)), 10);
-        return $"ws://{server}{_pathMatch}?token={token}";
+        return $"wss://{server}{_pathMatch}?token={token}";
     }
 
     /// <summary>
@@ -131,6 +131,7 @@ public class ImClient
             redata[server].ReceiveClientId.Add(uid);
         }
         var messageJson = JsonConvert.SerializeObject(message);
+        Console.WriteLine($"imClient 推送消息:{messageJson}");
         foreach (var sendArgs in redata.Values)
         {
             OnSend?.Invoke(this, sendArgs);

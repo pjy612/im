@@ -10,37 +10,42 @@ using imServer.Configuration;
 
 namespace imServer
 {
-
     public class Startup
     {
-
         public Startup(IHostingEnvironment env)
         {
             var builder = new ConfigurationBuilder()
-              .AddJsonFile("appsettings.json")
-              .AddJsonFile($"appsettings.{env.EnvironmentName}.json")
-              .AddEnvironmentVariables();
+                .AddJsonFile("appsettings.json")
+                .AddJsonFile($"appsettings.{env.EnvironmentName}.json")
+                .AddEnvironmentVariables();
             Config = builder.Build();
         }
+
         public IConfiguration Config;
+
         public void ConfigureServices(IServiceCollection services)
         {
             services.Configure<ImServerOption>(Config.GetSection(CONFIG.OPTIONS));
+            services.AddCors(options => options.AddPolicy("free", cors =>
+                cors.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin().AllowCredentials()
+            ));
         }
 
         public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
         {
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             Console.OutputEncoding = Encoding.GetEncoding("GB2312");
-            Console.InputEncoding = Encoding.GetEncoding("GB2312");
+            Console.InputEncoding  = Encoding.GetEncoding("GB2312");
             if (env.IsDevelopment())
                 app.UseDeveloperExceptionPage();
             var config = app.ApplicationServices.GetRequiredService<IOptions<ImServerOption>>().Value;
+            app.UseCors("free");
+            app.UseHttpsRedirection();
             app.UseImServer(new ImServerOptions
             {
-                Redis = new CSRedis.CSRedisClient(config.CSRedisClient),
+                Redis   = new CSRedis.CSRedisClient(config.CSRedisClient),
                 Servers = config.Servers.Split(";"),
-                Server = config.Server
+                Server  = config.Server
             });
         }
     }

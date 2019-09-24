@@ -28,4 +28,10 @@
         <ProjectReference Include="..\ImCore\ImCore.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <None Update="bilipush.pfx">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
+
 </Project>

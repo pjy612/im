@@ -30,6 +30,27 @@ namespace web.Controllers
                 websocketId = websocketId
             };
         }
+        [HttpGet("OnlineCount")]
+        public object OnlineCount()
+        {
+            var onlineClients = ImHelper.GetClientListByOnline().ToList();
+            return new
+            {
+                code = 0,
+                count = onlineClients.Count
+            };
+        }
+
+        [HttpPost("post_raffle")]
+        public object PostRaffle([FromForm] string msg)
+        {
+            var onlineClients = ImHelper.GetClientListByOnline();
+            ImHelper.SendMessage(Guid.NewGuid(), onlineClients, msg);
+            return new
+            {
+                code = 0
+            };
+        }
 
         /// <summary>
         /// 群聊，获取群列表
