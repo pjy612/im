@@ -1,6 +1,5 @@
-﻿
+﻿using System.Collections.Generic;
 #if ns20
-
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Newtonsoft.Json;
@@ -68,13 +67,16 @@ class ImServer : ImClient
     {
         public WebSocket socket;
         public Guid clientId;
+        public string clientMetaData;
 
-        public ImServerClient(WebSocket socket, Guid clientId)
+        public ImServerClient(WebSocket socket, Guid clientId, string clientMetaData)
         {
-            this.socket = socket;
-            this.clientId = clientId;
+            this.socket         = socket;
+            this.clientId       = clientId;
+            this.clientMetaData = clientMetaData;
         }
     }
+
     internal async Task Acceptor(HttpContext context, Func<Task> next)
     {
         //Console.WriteLine($"context.WebSockets.IsWebSocketRequest:{context.WebSockets.IsWebSocketRequest}");
@@ -89,13 +91,17 @@ class ImServer : ImClient
         var data = JsonConvert.DeserializeObject<(Guid clientId, string clientMetaData)>(token_value);
         Console.WriteLine($"客户{data.clientId}接入:{data.clientMetaData}");
         var socket = await context.WebSockets.AcceptWebSocketAsync();
-        var cli = new ImServerClient(socket, data.clientId);
+        var cli = new ImServerClient(socket, data.clientId, data.clientMetaData);
         var newid = Guid.NewGuid();
-
         var wslist = _clients.GetOrAdd(data.clientId, cliid => new ConcurrentDictionary<Guid, ImServerClient>());
         wslist.TryAdd(newid, cli);
-        _redis.StartPipe(a => a.HIncrBy($"{_redisPrefix}Online", data.clientId.ToString(), 1).Publish($"evt_{_redisPrefix}Online", token_value));
+        _redis.StartPipe(a =>
+        {
+            a.HSet($"{_redisPrefix}OnlineData", data.clientId.ToString(), data.clientMetaData);
+            a.HIncrBy($"{_redisPrefix}Online", data.clientId.ToString(), 1).Publish($"evt_{_redisPrefix}Online", token_value);
+        });
         Console.WriteLine($"当前客户数：{_clients.Count}");
+        SyncOnlineData();
         var buffer = new byte[BufferSize];
         var seg = new ArraySegment<byte>(buffer);
         try
@@ -115,9 +121,21 @@ class ImServer : ImClient
         await _redis.EvalAsync($"if redis.call('HINCRBY', KEYS[1], '{data.clientId}', '-1') <= 0 then redis.call('HDEL', KEYS[1], '{data.clientId}') end return 1",
             $"{_redisPrefix}Online");
         LeaveChan(data.clientId, GetChanListByClientId(data.clientId));
+        SyncOnlineData();
         Console.WriteLine($"客户{data.clientId}下线:{data.clientMetaData}");
         Console.WriteLine($"当前客户数：{_clients.Count}");
         await _redis.PublishAsync($"evt_{_redisPrefix}Offline", token_value);
+    }
+
+    void SyncOnlineData()
+    {
+        string key = $"{_redisPrefix}OnlineData";
+        Dictionary<string, string> hGetAll = _redis.HGetAll(key);
+        using (var pipe = _redis.StartPipe())
+        {
+            var outKeys = hGetAll.Keys.Where(k => _clients.Keys.All(c => c.ToString() != k)).ToArray();
+            if (outKeys.Any()) pipe.HDel(key, outKeys);
+        }
     }
 
     void RedisSubScribleMessage(CSRedis.CSRedisClient.SubscribeMessageEventArgs e)
@@ -125,17 +143,21 @@ class ImServer : ImClient
         try
         {
             var data = JsonConvert.DeserializeObject<(Guid senderClientId, Guid[] receiveClientId, string content, bool receipt)>(e.Body);
-            Trace.WriteLine($"收到消息：{data.content}" + (data.receipt ? "【需回执】" : ""));
+            Trace.WriteLine($"收到消息：{data.content}"      + (data.receipt ? "【需回执】" : ""));
             Console.WriteLine($"收到需推送消息：{data.content}" + (data.receipt ? "【需回执】" : ""));
 
             var outgoing = new ArraySegment<byte>(Encoding.UTF8.GetBytes(data.content));
+            if (!data.receiveClientId.Any())
+            {
+                data.receiveClientId = _clients.Keys.ToArray();
+            }
             foreach (var clientId in data.receiveClientId)
             {
                 if (_clients.TryGetValue(clientId, out var wslist) == false)
                 {
                     //Console.WriteLine($"websocket{clientId} 离线了，{data.content}" + (data.receipt ? "【需回执】" : ""));
                     if (data.senderClientId != Guid.Empty && clientId != data.senderClientId && data.receipt)
-                        SendMessage(clientId, new[] { data.senderClientId }, new
+                        SendMessage(clientId, new[] {data.senderClientId}, new
                         {
                             data.content,
                             receipt = "用户不在线"
@@ -153,7 +175,7 @@ class ImServer : ImClient
                     sh.socket.SendAsync(outgoing, WebSocketMessageType.Text, true, CancellationToken.None);
 
                 if (data.senderClientId != Guid.Empty && clientId != data.senderClientId && data.receipt)
-                    SendMessage(clientId, new[] { data.senderClientId }, new
+                    SendMessage(clientId, new[] {data.senderClientId}, new
                     {
                         data.content,
                         receipt = "发送成功"

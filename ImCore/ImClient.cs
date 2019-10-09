@@ -141,12 +141,41 @@ public class ImClient
     }
 
     /// <summary>
+    /// 向全部客户端id发送消息
+    /// </summary>
+    /// <param name="senderClientId">发送者的客户端id</param>
+    /// <param name="receiveClientId">接收者的客户端id</param>
+    /// <param name="message">消息</param>
+    /// <param name="receipt">是否回执</param>
+    public void SendMessageOnline(object message, bool receipt = false)
+    {
+        var sender = Guid.NewGuid();
+        var messageJson = JsonConvert.SerializeObject(message);
+        Console.WriteLine($"imClient 推送消息:{messageJson}");
+        foreach (var server in _servers)
+        {
+            OnSend?.Invoke(this, new ImSendEventArgs(server, sender, message, receipt));
+            _redis.Publish($"{_redisPrefix}Server{server}",
+                JsonConvert.SerializeObject((sender, new List<Guid>(), messageJson, receipt)));
+        }
+    }
+
+    /// <summary>
     /// 获取所在线客户端id
     /// </summary>
     /// <returns></returns>
     public IEnumerable<Guid> GetClientListByOnline()
     {
         return _redis.HKeys($"{_redisPrefix}Online").Select(a => Guid.TryParse(a, out var tryguid) ? tryguid : Guid.Empty).Where(a => a != Guid.Empty);
+    }
+
+    /// <summary>
+    /// 获取所在线客户端信息
+    /// </summary>
+    /// <returns></returns>
+    public Dictionary<string,string> GetAllClientDataByOnline()
+    {
+        return _redis.HGetAll($"{_redisPrefix}OnlineData");
     }
 
     /// <summary>

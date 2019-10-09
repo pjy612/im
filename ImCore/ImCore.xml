@@ -89,9 +89,24 @@
             <param name="message">消息</param>
             <param name="receipt">是否回执</param>
         </member>
+        <member name="M:ImClient.SendMessageOnline(System.Object,System.Boolean)">
+            <summary>
+            向全部客户端id发送消息
+            </summary>
+            <param name="senderClientId">发送者的客户端id</param>
+            <param name="receiveClientId">接收者的客户端id</param>
+            <param name="message">消息</param>
+            <param name="receipt">是否回执</param>
+        </member>
         <member name="M:ImClient.GetClientListByOnline">
             <summary>
             获取所在线客户端id
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:ImClient.GetAllClientDataByOnline">
+            <summary>
+            获取所在线客户端信息
             </summary>
             <returns></returns>
         </member>
@@ -185,9 +200,22 @@
             <param name="message">消息</param>
             <param name="receipt">是否回执</param>
         </member>
+        <member name="M:ImHelper.SendMessageOnline(System.Object,System.Boolean)">
+            <summary>
+            向全部在线客户发送消息
+            </summary>
+            <param name="message"></param>
+            <param name="receipt"></param>
+        </member>
         <member name="M:ImHelper.GetClientListByOnline">
             <summary>
             获取所在线客户端id
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:ImHelper.GetAllClientDataByOnline">
+            <summary>
+            获取所在线客户端信息
             </summary>
             <returns></returns>
         </member>

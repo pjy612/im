@@ -10,10 +10,8 @@ using Swashbuckle.AspNetCore.Swagger;
 
 namespace web
 {
-
     public class Startup
     {
-
         public Startup(IConfiguration configuration)
         {
             this.Configuration = configuration;
@@ -24,10 +22,7 @@ namespace web
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddMvc();
-            services.AddSwaggerGen(options =>
-            {
-                options.SwaggerDoc("v1",new Info());
-            });
+            services.AddSwaggerGen(options => { options.SwaggerDoc("v1", new Info()); });
             services.AddCors(options => options.AddPolicy("free", cors =>
                 cors.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin().AllowCredentials()
             ));
@@ -37,7 +32,7 @@ namespace web
         {
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             Console.OutputEncoding = Encoding.GetEncoding("GB2312");
-            Console.InputEncoding = Encoding.GetEncoding("GB2312");
+            Console.InputEncoding  = Encoding.GetEncoding("GB2312");
             loggerFactory.AddConsole(LogLevel.Error);
 
             if (env.IsDevelopment())
@@ -47,22 +42,18 @@ namespace web
             app.UseStaticFiles();
             app.UseCors("free");
             app.UseMvc();
-            app.UseSwagger().UseSwaggerUI(options =>
-            {
-                options.SwaggerEndpoint("/swagger/v1/swagger.json", "HKERP API V1");
-            });
+            app.UseSwagger().UseSwaggerUI(options => { options.SwaggerEndpoint("/swagger/v1/swagger.json", "HKERP API V1"); });
+
+            string redis = Configuration.GetSection("cfg:redis").Get<string>()         ?? "127.0.0.1:6379,poolsize=5";
+            string[] servers = Configuration.GetSection("cfg:servers").Get<string[]>() ?? new string[] {"bilipush.1024dream.net:7777"};
+
             ImHelper.Initialization(new ImClientOptions
             {
-                Redis = new CSRedis.CSRedisClient("127.0.0.1:6379,poolsize=5"),
-                Servers = new[]
-                {
-                    //"127.0.0.1:7777",
-                    "bilipush.1024dream.net:7777",
-                    //"118.25.209.177:6001",
-                }
+                Redis   = new CSRedis.CSRedisClient(redis),
+                Servers = servers
             });
 
-            ImHelper.Instance.OnSend += (s, e) => 
+            ImHelper.Instance.OnSend += (s, e) =>
                 Console.WriteLine($"ImClient.SendMessage(server={e.Server},data={JsonConvert.SerializeObject(e.Message)})");
 
             ImHelper.EventBus(
@@ -71,7 +62,7 @@ namespace web
                     Console.WriteLine(t.clientId + "上线了");
 //                    var onlineUids = ImHelper.GetClientListByOnline();
 //                    ImHelper.SendMessage(t.clientId, onlineUids, $"用户{t.clientId}上线了");
-                }, 
+                },
                 t => Console.WriteLine(t.clientId + "下线了"));
         }
     }

@@ -17,7 +17,6 @@
     },
     "imServer": {
       "commandName": "Project",
-      "launchBrowser": true,
       "environmentVariables": {
         "ImServerOption:Servers": "127.0.0.1:6001;127.0.0.2:6002",
         "ImServerOption:Server": "127.0.0.1:6001",

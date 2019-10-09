@@ -10,7 +10,6 @@ namespace web.Controllers
     [Route("ws")]
     public class WebSocketController : Controller
     {
-
         public string Ip => this.Request.Headers["X-Real-IP"].FirstOrDefault() ?? this.Request.HttpContext.Connection.RemoteIpAddress.ToString();
 
         /// <summary>
@@ -25,27 +24,28 @@ namespace web.Controllers
             var wsserver = ImHelper.PrevConnectServer(websocketId.Value, this.Ip);
             return new
             {
-                code = 0,
-                server = wsserver,
+                code        = 0,
+                server      = wsserver,
                 websocketId = websocketId
             };
         }
-        [HttpGet("OnlineCount")]
-        public object OnlineCount()
+
+        [HttpGet("OnlineData")]
+        public object OnlineData()
         {
-            var onlineClients = ImHelper.GetClientListByOnline().ToList();
+            var onlineClients = ImHelper.GetAllClientDataByOnline().OrderBy(r => r.Value).ToDictionary(r => r.Key, r => r.Value);
             return new
             {
-                code = 0,
-                count = onlineClients.Count
+                code  = 0,
+                count = onlineClients.Count,
+                data  = onlineClients
             };
         }
 
         [HttpPost("post_raffle")]
         public object PostRaffle([FromForm] string msg)
         {
-            var onlineClients = ImHelper.GetClientListByOnline();
-            ImHelper.SendMessage(Guid.NewGuid(), onlineClients, msg);
+            ImHelper.SendMessageOnline(msg);
             return new
             {
                 code = 0
@@ -61,7 +61,7 @@ namespace web.Controllers
         {
             return new
             {
-                code = 0,
+                code     = 0,
                 channels = ImHelper.GetChanList()
             };
         }
@@ -97,6 +97,7 @@ namespace web.Controllers
                 code = 0
             };
         }
+
         /// <summary>
         /// 单聊
         /// </summary>
@@ -113,7 +114,7 @@ namespace web.Controllers
 
             //if (loginUser.好友 != recieveUser) throw new Exception("不是好友");
 
-            ImHelper.SendMessage(senderWebsocketId, new[] { receiveWebsocketId }, message, isReceipt);
+            ImHelper.SendMessage(senderWebsocketId, new[] {receiveWebsocketId}, message, isReceipt);
 
             //loginUser.保存记录(message);
             //recieveUser.保存记录(message);

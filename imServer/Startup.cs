@@ -40,7 +40,6 @@ namespace imServer
                 app.UseDeveloperExceptionPage();
             var config = app.ApplicationServices.GetRequiredService<IOptions<ImServerOption>>().Value;
             app.UseCors("free");
-            app.UseHttpsRedirection();
             app.UseImServer(new ImServerOptions
             {
                 Redis   = new CSRedis.CSRedisClient(config.CSRedisClient),
