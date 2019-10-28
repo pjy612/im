@@ -14,6 +14,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		readme.md = readme.md
 	EndProjectSection
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "YjMonitorNet", "YjMonitor\YjMonitorNet.csproj", "{96DA10B6-7D54-4F50-BBAC-B947F1032B2C}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NewLife.Core", "..\..\NewLifeX\X\NewLife.Core\NewLife.Core.csproj", "{D725AA21-322A-45EE-B8DA-B9B03E4DD44F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -32,6 +36,14 @@ Global
 		{7C67F3CF-013D-4178-B156-0A92BB589DEE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7C67F3CF-013D-4178-B156-0A92BB589DEE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7C67F3CF-013D-4178-B156-0A92BB589DEE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{96DA10B6-7D54-4F50-BBAC-B947F1032B2C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{96DA10B6-7D54-4F50-BBAC-B947F1032B2C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{96DA10B6-7D54-4F50-BBAC-B947F1032B2C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{96DA10B6-7D54-4F50-BBAC-B947F1032B2C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D725AA21-322A-45EE-B8DA-B9B03E4DD44F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D725AA21-322A-45EE-B8DA-B9B03E4DD44F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D725AA21-322A-45EE-B8DA-B9B03E4DD44F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D725AA21-322A-45EE-B8DA-B9B03E4DD44F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

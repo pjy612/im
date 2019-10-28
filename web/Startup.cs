@@ -6,6 +6,8 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System;
 using System.Text;
+using aspCore.Extensions;
+using Microsoft.AspNetCore.Cors.Infrastructure;
 using Swashbuckle.AspNetCore.Swagger;
 
 namespace web
@@ -23,9 +25,19 @@ namespace web
         {
             services.AddMvc();
             services.AddSwaggerGen(options => { options.SwaggerDoc("v1", new Info()); });
-            services.AddCors(options => options.AddPolicy("free", cors =>
-                cors.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin().AllowCredentials()
-            ));
+            services.Add(ServiceDescriptor.Transient<ICorsService, WildcardCorsService>());
+            services.AddCors(options =>
+            {
+                options.AddPolicy("free", cors =>
+                    cors.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin().AllowCredentials()
+                );
+                options.AddPolicy("bilibili", cors =>
+                    cors.WithOrigins("*.bilibili.com", "*.localhost")
+                        .AllowAnyHeader().AllowAnyMethod()
+                        .SetIsOriginAllowedToAllowWildcardSubdomains()
+                        .AllowCredentials()
+                );
+            });
         }
 
         public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
@@ -40,7 +52,8 @@ namespace web
 
             app.UseDefaultFiles();
             app.UseStaticFiles();
-            app.UseCors("free");
+            app.UseCors("bilibili");
+            //app.UseCors("free");
             app.UseMvc();
             app.UseSwagger().UseSwaggerUI(options => { options.SwaggerEndpoint("/swagger/v1/swagger.json", "HKERP API V1"); });
 

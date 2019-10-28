@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Cors.Infrastructure;
 
 namespace web.Controllers
 {
@@ -11,6 +12,7 @@ namespace web.Controllers
     public class WebSocketController : Controller
     {
         public string Ip => this.Request.Headers["X-Real-IP"].FirstOrDefault() ?? this.Request.HttpContext.Connection.RemoteIpAddress.ToString();
+        public string referer => this.Request.Headers["Referer"].FirstOrDefault();
 
         /// <summary>
         /// 获取websocket分区
@@ -21,7 +23,7 @@ namespace web.Controllers
         public object preConnect([FromForm] Guid? websocketId)
         {
             if (websocketId == null) websocketId = Guid.NewGuid();
-            var wsserver = ImHelper.PrevConnectServer(websocketId.Value, this.Ip);
+            var wsserver = ImHelper.PrevConnectServer(websocketId.Value, $"IP:{this.Ip},Referer:{this.referer}");
             return new
             {
                 code        = 0,

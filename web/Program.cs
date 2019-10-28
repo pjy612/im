@@ -18,13 +18,21 @@ namespace web
             CreateWebHostBuilder(args).Build().Run();
         }
 
-        public static IWebHostBuilder CreateWebHostBuilder(string[] args) =>
-            WebHost.CreateDefaultBuilder(args)
-                .UseKestrel(options =>
-                {
-                    options.ListenAnyIP(5001);
-                    options.ListenAnyIP(5000, listenOptions => { listenOptions.UseHttps("bilipush.pfx", "bilipush"); });
-                })
+        public static IWebHostBuilder CreateWebHostBuilder(string[] args)
+        {
+            var config = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                .AddCommandLine(args)
+                .Build();
+            return WebHost.CreateDefaultBuilder(args)
+                //.UseConfiguration(config)
+                //.UseKestrel(options =>
+                //{
+                //    options.ListenAnyIP(5001);
+                //    options.ListenAnyIP(5000, listenOptions => { listenOptions.UseHttps("bilipush.pfx", "bilipush"); });
+                //})
                 .UseStartup<Startup>();
+        }
     }
 }

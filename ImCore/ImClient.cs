@@ -15,10 +15,12 @@ public class ImClientOptions
     /// CSRedis 对象，用于存储数据和发送消息
     /// </summary>
     public CSRedisClient Redis { get; set; }
+
     /// <summary>
     /// 负载的服务端
     /// </summary>
     public string[] Servers { get; set; }
+
     /// <summary>
     /// websocket请求的路径，默认值：/ws
     /// </summary>
@@ -31,18 +33,22 @@ public class ImSendEventArgs : EventArgs
     /// 发送者的客户端id
     /// </summary>
     public Guid SenderClientId { get; }
+
     /// <summary>
     /// 接收者的客户端id
     /// </summary>
     public List<Guid> ReceiveClientId { get; } = new List<Guid>();
+
     /// <summary>
     /// imServer 服务器节点
     /// </summary>
     public string Server { get; }
+
     /// <summary>
     /// 消息
     /// </summary>
     public object Message { get; }
+
     /// <summary>
     /// 是否回执
     /// </summary>
@@ -50,10 +56,10 @@ public class ImSendEventArgs : EventArgs
 
     internal ImSendEventArgs(string server, Guid senderClientId, object message, bool receipt = false)
     {
-        this.Server = server;
+        this.Server         = server;
         this.SenderClientId = senderClientId;
-        this.Message = message;
-        this.Receipt = receipt;
+        this.Message        = message;
+        this.Receipt        = receipt;
     }
 }
 
@@ -78,12 +84,12 @@ public class ImClient
     /// <param name="options"></param>
     public ImClient(ImClientOptions options)
     {
-        if (options.Redis == null) throw new ArgumentException("ImClientOptions.Redis 参数不能为空");
+        if (options.Redis         == null) throw new ArgumentException("ImClientOptions.Redis 参数不能为空");
         if (options.Servers.Any() == false) throw new ArgumentException("ImClientOptions.Servers 参数不能为空");
-        _redis = options.Redis;
-        _servers = options.Servers;
+        _redis       = options.Redis;
+        _servers     = options.Servers;
         _redisPrefix = $"wsim{options.PathMatch.Replace('/', '_')}";
-        _pathMatch = options.PathMatch ?? "/ws";
+        _pathMatch   = options.PathMatch ?? "/ws";
     }
 
     /// <summary>
@@ -106,9 +112,15 @@ public class ImClient
     /// <returns>websocket 地址：ws://xxxx/ws?token=xxx</returns>
     public string PrevConnectServer(Guid clientId, string clientMetaData)
     {
+        
         var server = SelectServer(clientId);
-        var token = $"{Guid.NewGuid()}{Guid.NewGuid()}{Guid.NewGuid()}{Guid.NewGuid()}".Replace("-", "");
-        _redis.Set($"{_redisPrefix}Token{token}", JsonConvert.SerializeObject((clientId, clientMetaData)), 10);
+        var token = $"{Guid.NewGuid()}{Guid.NewGuid()}".Replace("-", "");
+        Console.WriteLine($"PrevConnectServer:{clientId},clientMetaData:{clientMetaData},token:{token}");
+        bool ret = false;
+        while (!ret)
+        {
+            ret = _redis.Set($"{_redisPrefix}Token{token}", JsonConvert.SerializeObject((clientId, clientMetaData)), 10);
+        }
         return $"wss://{server}{_pathMatch}?token={token}";
     }
 
@@ -173,7 +185,7 @@ public class ImClient
     /// 获取所在线客户端信息
     /// </summary>
     /// <returns></returns>
-    public Dictionary<string,string> GetAllClientDataByOnline()
+    public Dictionary<string, string> GetAllClientDataByOnline()
     {
         return _redis.HGetAll($"{_redisPrefix}OnlineData");
     }
@@ -206,6 +218,7 @@ public class ImClient
             .HSet($"{_redisPrefix}Client{clientId}", chan, 0)
             .HIncrBy($"{_redisPrefix}ListChan", chan, 1));
     }
+
     /// <summary>
     /// 离开群聊频道
     /// </summary>
@@ -224,6 +237,7 @@ public class ImClient
                         $"{_redisPrefix}ListChan");
         }
     }
+
     /// <summary>
     /// 获取群聊频道所有客户端id（测试）
     /// </summary>
@@ -233,6 +247,7 @@ public class ImClient
     {
         return _redis.HKeys($"{_redisPrefix}Chan{chan}").Select(a => Guid.Parse(a)).ToArray();
     }
+
     /// <summary>
     /// 清理群聊频道的离线客户端（测试）
     /// </summary>
@@ -250,7 +265,7 @@ public class ImClient
             if (start < 0)
             {
                 length = start + 10;
-                start = 0;
+                start  = 0;
             }
             var slice = span.Slice(start, length);
             var hvals = _redis.HMGet($"{_redisPrefix}Online", slice.ToArray().Select(b => b.ToString()).ToArray());
@@ -276,6 +291,7 @@ public class ImClient
         var ret = _redis.HGetAll<long>($"{_redisPrefix}ListChan");
         return ret.Select(a => (a.Key, a.Value));
     }
+
     /// <summary>
     /// 获取用户参与的所有群聊频道
     /// </summary>
@@ -285,6 +301,7 @@ public class ImClient
     {
         return _redis.HKeys($"{_redisPrefix}Client{clientId}");
     }
+
     /// <summary>
     /// 获取群聊频道的在线人数
     /// </summary>
@@ -301,7 +318,7 @@ public class ImClient
     /// <param name="senderClientId">发送者的客户端id</param>
     /// <param name="chan">群聊频道名</param>
     /// <param name="message">消息</param>
-	public void SendChanMessage(Guid senderClientId, string chan, object message)
+    public void SendChanMessage(Guid senderClientId, string chan, object message)
     {
         var websocketIds = _redis.HKeys($"{_redisPrefix}Chan{chan}");
         SendMessage(Guid.Empty, websocketIds.Where(a => !string.IsNullOrEmpty(a)).Select(a => Guid.TryParse(a, out var tryuuid) ? tryuuid : Guid.Empty).ToArray(), message);
