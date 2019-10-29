@@ -68,7 +68,7 @@ namespace YjMonitor
                 //var socketClient = s as ISocketClient;
                 //socketClient.SendMessage(new Packet(new byte[0]));
             };
-            yjClient.Connect();
+            yjClient.ReConnect();
             while (true)
             {
                 Console.Read();
@@ -100,29 +100,22 @@ namespace YjMonitor
 
             public void Connect()
             {
-                try
-                {
-                    client     = net.CreateRemote();
-                    client.Log = XTrace.Log;
+                client     = net.CreateRemote();
+                client.Log = XTrace.Log;
 //                    client.LogSend    = true;
 //                    client.LogReceive = true;
-                    client.Add(new LengthFieldCodec {Size = -4});
-                    client.Opened         += Client_Opened;
-                    client.Received       += Client_Received;
-                    client.Closed         += Client_Closed;
-                    client.Error          += Client_Error;
-                    client.ThrowException =  false;
-                    client.Open();
-                    onlineCheck = new TimerX(state =>
-                    {
-                        ISocketClient socketClient = state as ISocketClient;
-                        if (!socketClient.Active || socketClient.Disposed) ReConnect();
-                    }, client, 5_000, 5_000);
-                }
-                catch (Exception e)
+                client.Add(new LengthFieldCodec {Size = -4});
+                client.Opened         += Client_Opened;
+                client.Received       += Client_Received;
+                client.Closed         += Client_Closed;
+                client.Error          += Client_Error;
+                client.ThrowException =  false;
+                client.Open();
+                onlineCheck = new TimerX(state =>
                 {
-                    ReConnect();
-                }
+                    ISocketClient socketClient = state as ISocketClient;
+                    if (!socketClient.Active || socketClient.Disposed) ReConnect();
+                }, client, 5_000, 5_000);
             }
 
             private void Client_Received(object sender, ReceivedEventArgs e)
@@ -153,6 +146,7 @@ namespace YjMonitor
 
             public void ReConnect()
             {
+                again:
                 try
                 {
                     //client?.Close("ReConnect");
@@ -163,7 +157,7 @@ namespace YjMonitor
                 }
                 catch (Exception e)
                 {
-                    ReConnect();
+                    goto again;
                 }
             }
 
