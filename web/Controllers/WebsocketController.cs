@@ -4,7 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using BiliEntity;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Newtonsoft.Json;
 
 namespace web.Controllers
 {
@@ -13,6 +15,7 @@ namespace web.Controllers
     {
         public string Ip => this.Request.Headers["X-Real-IP"].FirstOrDefault() ?? this.Request.HttpContext.Connection.RemoteIpAddress.ToString();
         public string referer => this.Request.Headers["Referer"].FirstOrDefault();
+        public string UA => this.Request.Headers["User-Agent"].FirstOrDefault();
 
         /// <summary>
         /// 获取websocket分区
@@ -22,6 +25,10 @@ namespace web.Controllers
         [HttpPost("pre-connect")]
         public object preConnect([FromForm] Guid? websocketId)
         {
+            if (UA.ToLower().Contains("firefox"))
+            {
+                return new {code = -1, msg = "请勿使用火狐浏览器"};
+            }
             if (websocketId == null) websocketId = Guid.NewGuid();
             var wsserver = ImHelper.PrevConnectServer(websocketId.Value, $"IP:{this.Ip},Referer:{this.referer}");
             return new

@@ -98,30 +98,33 @@ class ImServer : ImClient
     {
         //Console.WriteLine($"context.WebSockets.IsWebSocketRequest:{context.WebSockets.IsWebSocketRequest}");
         if (!context.WebSockets.IsWebSocketRequest) return;
-
-        string ip = context.Request.Headers["X-Real-IP"].FirstOrDefault() ?? context.Connection.RemoteIpAddress.ToString();
-        string[] sMembers = await _redis.SMembersAsync("blacklist");
-        if (sMembers.Any(r => ip.Contains(r)))
+        try
         {
-            Console.WriteLine($"检测到多次异常黑名单IP尝试访问:{ip}");
-            return;
-        }
-        string token = context.Request.Query["token"];
-        var origin = context.Request.Headers["Origin"];
-        if (string.IsNullOrEmpty(token)) return;
-        int errCount = await _redis.HGetAsync<int>("preBlack", ip);
-        var token_value = await _redis.GetAsync($"{_redisPrefix}Token{token}");
-        if (string.IsNullOrEmpty(token_value))
-        {
-            await _redis.HIncrByAsync("preBlack", ip);
-            if (errCount >= 3)
+            string ip = context.Request.Headers["X-Real-IP"].FirstOrDefault() ?? context.Connection.RemoteIpAddress.ToString();
+            string UA = context.Request.Headers["User-Agent"].FirstOrDefault();
+            if (UA.ToLower().Contains("firefox")) return;
+            string[] sMembers = await _redis.SMembersAsync("blacklist");
+            if (sMembers.Any(r => ip.Contains(r)))
             {
-                Console.WriteLine($"{ip}频繁错误！！！次数:{errCount}");
-                await _redis.SAddAsync("blacklist", ip);
-                await _redis.HDelAsync("preBlack", ip);
+                Console.WriteLine($"检测到多次异常黑名单IP尝试访问:{ip}");
                 return;
             }
-            throw new Exception($@"
+            string token = context.Request.Query["token"];
+            var origin = context.Request.Headers["Origin"];
+            if (string.IsNullOrEmpty(token)) return;
+            int errCount = await _redis.HGetAsync<int>("preBlack", ip);
+            var token_value = await _redis.GetAsync($"{_redisPrefix}Token{token}");
+            if (string.IsNullOrEmpty(token_value))
+            {
+                await _redis.HIncrByAsync("preBlack", ip);
+                if (errCount >= 3)
+                {
+                    Console.WriteLine($"{ip}频繁错误！！！次数:{errCount}");
+                    await _redis.SAddAsync("blacklist", ip);
+                    await _redis.HDelAsync("preBlack", ip);
+                    return;
+                }
+                throw new Exception($@"
 授权错误：用户需通过 ImHelper.PrevConnectServer 获得包含 token 的连接
 IP:{ip},
 origin:{origin},
@@ -129,47 +132,57 @@ token:{token},
 Header:{string.Join("&", context.Request.Headers.Select(r => $"{r.Key}={r.Value}"))},
 Param:{string.Join("&", context.Request.Query.Select(r => $"{r.Key}={r.Value}"))},
 ");
-        }
-        await _redis.DelAsync($"{_redisPrefix}Token{token}");
-        
-        await _redis.HDelAsync("preBlack", ip);
-        var data = JsonConvert.DeserializeObject<(Guid clientId, string clientMetaData)>(token_value);
-        Console.WriteLine($"客户{data.clientId}接入:{data.clientMetaData}");
-        var socket = await context.WebSockets.AcceptWebSocketAsync();
-        var cli = new ImServerClient(socket, data.clientId, data.clientMetaData);
-        var newid = Guid.NewGuid();
-        var wslist = _clients.GetOrAdd(data.clientId, cliid => new ConcurrentDictionary<Guid, ImServerClient>());
-        wslist.TryAdd(newid, cli);
-        _redis.StartPipe(a =>
-        {
-            a.HSet($"{_redisPrefix}OnlineData", data.clientId.ToString(), data.clientMetaData);
-            a.HIncrBy($"{_redisPrefix}Online", data.clientId.ToString(), 1).Publish($"evt_{_redisPrefix}Online", token_value);
-        });
-        Console.WriteLine($"当前客户数：{_clients.Count}");
-        await SyncOnlineData();
-        var buffer = new byte[BufferSize];
-        var seg = new ArraySegment<byte>(buffer);
-        try
-        {
-            while (socket.State == WebSocketState.Open && _clients.ContainsKey(data.clientId))
-            {
-                var incoming = await socket.ReceiveAsync(seg, CancellationToken.None);
-                var outgoing = new ArraySegment<byte>(buffer, 0, incoming.Count);
             }
-            socket.Abort();
+            await _redis.DelAsync($"{_redisPrefix}Token{token}");
+
+            await _redis.HDelAsync("preBlack", ip);
+            var data = JsonConvert.DeserializeObject<(Guid clientId, string clientMetaData)>(token_value);
+            Console.WriteLine($"客户{data.clientId}接入:{data.clientMetaData}");
+            var socket = await context.WebSockets.AcceptWebSocketAsync();
+            var cli = new ImServerClient(socket, data.clientId, data.clientMetaData);
+            var newid = Guid.NewGuid();
+            var wslist = _clients.GetOrAdd(data.clientId, cliid => new ConcurrentDictionary<Guid, ImServerClient>());
+            wslist.TryAdd(newid, cli);
+            try
+            {
+                _redis.StartPipe().HSet($"{_redisPrefix}OnlineData", data.clientId.ToString(), data.clientMetaData)
+                    .HIncrBy($"{_redisPrefix}Online", data.clientId.ToString(), 1)
+                    .Publish($"evt_{_redisPrefix}Online", token_value).EndPipe();
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+            }
+            Console.WriteLine($"当前客户数：{_clients.Count}");
+            await SyncOnlineData();
+            var buffer = new byte[BufferSize];
+            var seg = new ArraySegment<byte>(buffer);
+            try
+            {
+                while (socket.State == WebSocketState.Open && _clients.ContainsKey(data.clientId))
+                {
+                    var incoming = await socket.ReceiveAsync(seg, CancellationToken.None);
+                    var outgoing = new ArraySegment<byte>(buffer, 0, incoming.Count);
+                }
+                socket.Abort();
+            }
+            catch
+            {
+            }
+            wslist.TryRemove(newid, out var oldcli);
+            if (wslist.Any() == false) _clients.TryRemove(data.clientId, out var oldwslist);
+            await _redis.EvalAsync($"if redis.call('HINCRBY', KEYS[1], '{data.clientId}', '-1') <= 0 then redis.call('HDEL', KEYS[1], '{data.clientId}') end return 1",
+                $"{_redisPrefix}Online");
+            LeaveChan(data.clientId, GetChanListByClientId(data.clientId));
+            await SyncOnlineData();
+            Console.WriteLine($"客户{data.clientId}下线:{data.clientMetaData}");
+            Console.WriteLine($"当前客户数：{_clients.Count}");
+            await _redis.PublishAsync($"evt_{_redisPrefix}Offline", token_value);
         }
-        catch
+        catch (Exception e)
         {
+            Console.WriteLine(e);
         }
-        wslist.TryRemove(newid, out var oldcli);
-        if (wslist.Any() == false) _clients.TryRemove(data.clientId, out var oldwslist);
-        await _redis.EvalAsync($"if redis.call('HINCRBY', KEYS[1], '{data.clientId}', '-1') <= 0 then redis.call('HDEL', KEYS[1], '{data.clientId}') end return 1",
-            $"{_redisPrefix}Online");
-        LeaveChan(data.clientId, GetChanListByClientId(data.clientId));
-        await SyncOnlineData();
-        Console.WriteLine($"客户{data.clientId}下线:{data.clientMetaData}");
-        Console.WriteLine($"当前客户数：{_clients.Count}");
-        await _redis.PublishAsync($"evt_{_redisPrefix}Offline", token_value);
     }
 
     async Task SyncOnlineData()

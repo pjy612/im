@@ -226,15 +226,22 @@ public class ImClient
     /// <param name="chans">群聊频道名</param>
     public void LeaveChan(Guid clientId, params string[] chans)
     {
-        if (chans?.Any() != true) return;
-        using (var pipe = _redis.StartPipe())
+        try
         {
-            foreach (var chan in chans)
-                pipe
-                    .HDel($"{_redisPrefix}Chan{chan}", clientId.ToString())
-                    .HDel($"{_redisPrefix}Client{clientId}", chan)
-                    .Eval($"if redis.call('HINCRBY', KEYS[1], '{chan}', '-1') <= 0 then redis.call('HDEL', KEYS[1], '{chan}') end return 1",
-                        $"{_redisPrefix}ListChan");
+            if (chans?.Any() != true) return;
+            using (var pipe = _redis.StartPipe())
+            {
+                foreach (var chan in chans)
+                    pipe
+                        .HDel($"{_redisPrefix}Chan{chan}", clientId.ToString())
+                        .HDel($"{_redisPrefix}Client{clientId}", chan)
+                        .Eval($"if redis.call('HINCRBY', KEYS[1], '{chan}', '-1') <= 0 then redis.call('HDEL', KEYS[1], '{chan}') end return 1",
+                            $"{_redisPrefix}ListChan");
+            }
+        }
+        catch (Exception ex)
+        {
+            
         }
     }
 

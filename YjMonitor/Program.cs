@@ -42,7 +42,7 @@ namespace YjMonitor
 
         static void Main(string[] args)
         {
-            XTrace.UseConsole(useFileLog: false);
+            XTrace.UseConsole();
             ImHelper.Initialization(new ImClientOptions
             {
                 Redis   = new CSRedis.CSRedisClient(JsonConfig<YjMonitorConfig>.Current.Redis),
@@ -79,7 +79,7 @@ namespace YjMonitor
         {
             private NetUri net;
             private string key;
-            private ISocketClient client;
+            private TcpSession client;
             private int heartBeat = 30;
             private TimerX timer;
             private TimerX onlineCheck;
@@ -100,8 +100,10 @@ namespace YjMonitor
 
             public void Connect()
             {
-                client     = net.CreateRemote();
-                client.Log = XTrace.Log;
+                client               = net.CreateRemote() as TcpSession;
+                client.Log           = XTrace.Log;
+                client.MaxAsync      = 1;
+                client.AutoReconnect = 0;
 //                    client.LogSend    = true;
 //                    client.LogReceive = true;
                 client.Add(new LengthFieldCodec {Size = -4});
@@ -110,12 +112,25 @@ namespace YjMonitor
                 client.Closed         += Client_Closed;
                 client.Error          += Client_Error;
                 client.ThrowException =  false;
-                client.Open();
-                onlineCheck = new TimerX(state =>
+                client.OnDisposed     += Client_OnDisposed;
+                try
                 {
-                    ISocketClient socketClient = state as ISocketClient;
-                    if (!socketClient.Active || socketClient.Disposed) ReConnect();
-                }, client, 5_000, 5_000);
+                    client.Open();
+                }
+                finally
+                {
+                    onlineCheck = new TimerX(state =>
+                    {
+                        //XTrace.WriteLine("自检");
+                        ISocketClient socketClient = state as ISocketClient;
+                        if (!socketClient.Active) ReConnect();
+                    }, client, 1_000, 1_000) {CanExecute = () => !client.Active};
+                }
+            }
+
+            private void Client_OnDisposed(object sender, EventArgs e)
+            {
+                //XTrace.WriteLine("销毁...");
             }
 
             private void Client_Received(object sender, ReceivedEventArgs e)
@@ -131,14 +146,22 @@ namespace YjMonitor
                     timer = new TimerX(state =>
                     {
                         XTrace.WriteLine("发送心跳检测...");
-                        Send("");
-                    }, null, 30_000, 30_000);
+                        try
+                        {
+                            Send("");
+                        }
+                        catch (Exception exception)
+                        {
+                            XTrace.WriteException(exception);
+                            ReConnect();
+                        }
+                    }, null, 0, 30_000) {CanExecute = () => client.Active};
                     return;
                 }
                 else if (data_type == "error")
                 {
                     XTrace.WriteLine("监控端异常断开准备重连！");
-                    ReConnect();
+                    client?.Close("监控端异常断开准备重连！");
                     return;
                 }
                 OnReceived?.Invoke(sender, e);
@@ -146,7 +169,7 @@ namespace YjMonitor
 
             public void ReConnect()
             {
-                again:
+                //again:
                 try
                 {
                     //client?.Close("ReConnect");
@@ -157,17 +180,20 @@ namespace YjMonitor
                 }
                 catch (Exception e)
                 {
-                    goto again;
+                    //goto again;
                 }
             }
 
             private void Client_Error(object sender, ExceptionEventArgs e)
             {
+                XTrace.WriteLine("连接发生错误,尝试重连...");
+                //ReConnect();
             }
 
             private void Client_Closed(object sender, EventArgs e)
             {
                 XTrace.WriteLine("连接断开,尝试重连...");
+                //ReConnect();
             }
 
             private void Client_Opened(object sender, EventArgs e)
