@@ -15,19 +15,21 @@ using NewLife.Log;
 using NewLife.Model;
 using NewLife.Net;
 using NewLife.Net.Handlers;
+using NewLife.Security;
 using NewLife.Serialization;
 using NewLife.Threading;
 using Newtonsoft.Json.Linq;
 
 namespace YjMonitor
 {
-    [JsonConfigFile("app.json")]
+    [JsonConfigFile("app.json",10_0000)]
     public class YjMonitorConfig : JsonConfig<YjMonitorConfig>
     {
         public string Key { get; set; } = "admin";
         public string Address { get; set; } = "tcp://127.0.0.1:8002";
         public string Redis { get; set; } = "127.0.0.1:6379,poolsize=5";
         public string[] ImServers { get; set; } = new[] {"127.0.0.1:7777"};
+        public double Rand { get; set; } = 0.8;
     }
 
     class Program
@@ -59,7 +61,10 @@ namespace YjMonitor
                 try
                 {
                     JObject data = JObject.Parse(unescape);
-                    ImHelper.SendMessageOnline(msg);
+                    if (new Random(Guid.NewGuid().GetHashCode()).NextDouble() < JsonConfig<YjMonitorConfig>.Current.Rand)
+                    {
+                        ImHelper.SendMessageOnline(msg);
+                    }
                 }
                 catch (Exception ex)
                 {

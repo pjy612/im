@@ -13,6 +13,7 @@ namespace BiliEntity
     [DataObject]
     [Description("主播舰队")]
     [BindIndex("PRIMARY", true, "uid")]
+    [BindIndex("idx_uid", false, "uid")]
     [BindIndex("idx_last_update_time", false, "last_update_time")]
     [BindTable("guard_top", Description = "主播舰队", ConnName = "BiliCenter", DbType = DatabaseType.MySql)]
     public partial class GuardTop<TEntity> : IGuardTop

@@ -5,9 +5,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using aspCore.Extensions;
+using BiliEntity;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using NewLife.Threading;
 using Swashbuckle.AspNetCore.Swagger;
 
 namespace web
@@ -40,7 +44,7 @@ namespace web
             });
         }
 
-        
+
         public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
         {
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -57,7 +61,7 @@ namespace web
             //app.UseCors("free");
             app.UseMvc();
             app.UseSwagger().UseSwaggerUI(options => { options.SwaggerEndpoint("/swagger/v1/swagger.json", "HKERP API V1"); });
-            
+
             string redis = Configuration.GetSection("cfg:redis").Get<string>()         ?? "127.0.0.1:6379,poolsize=5";
             string[] servers = Configuration.GetSection("cfg:servers").Get<string[]>() ?? new string[] {"bilipush.1024dream.net:7777"};
 
@@ -78,6 +82,31 @@ namespace web
 //                    ImHelper.SendMessage(t.clientId, onlineUids, $"用户{t.clientId}上线了");
                 },
                 t => Console.WriteLine(t.clientId + "下线了"));
+
+            IList<RoomInitList> roomInitLists = RoomInitList.FindAll(RoomInitList._.Uid.IsNull());
+            foreach (var roomInitList in roomInitLists)
+            {
+                roomInitList.Uid = roomInitList.Data.Data.Uid;
+                roomInitList.SaveAsync();
+            }
+            new TimerX(state =>
+            {
+                IList<RoomInitList> allRoom = RoomInitList.FindAll();
+                IList<GuardTop> guardTops = GuardTop.FindAll();
+                IList<FollowNum> followNums = FollowNum.FindAll();
+                IList<FanGifts> fans = FanGifts.FindAll();
+                foreach (RoomInitList r in allRoom)
+                {
+                    new RoomSort()
+                    {
+                        RoomID    = r.RoomID,
+                        Uid       = r.Uid,
+                        FansNum   = fans.FirstOrDefault(x => x.RoomID == r.RoomID)?.Num ?? 0,
+                        FollowNum = followNums.FirstOrDefault(x => x.Uid == r.Uid)?.Num ?? 0,
+                        GuardNum  = guardTops.FirstOrDefault(x => x.Uid == r.Uid)?.Num  ?? 0,
+                    }.SaveAsync();
+                }
+            }, null, 100, 60_000);
         }
     }
 }

@@ -13,6 +13,7 @@ namespace BiliEntity
     [DataObject]
     [Description("主播关注数")]
     [BindIndex("PRIMARY", true, "uid")]
+    [BindIndex("idx_uid", false, "uid")]
     [BindIndex("idx_last_update_time", false, "last_update_time")]
     [BindTable("follow_num", Description = "主播关注数", ConnName = "BiliCenter", DbType = DatabaseType.MySql)]
     public partial class FollowNum<TEntity> : IFollowNum

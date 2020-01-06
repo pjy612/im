@@ -19,7 +19,7 @@ namespace web
 
         public static Lazy<WorkQueue<long>> RoomInitQueue = new Lazy<WorkQueue<long>>(() =>
         {
-            var q = new WorkQueue<long>(10);
+            var q = new WorkQueue<long>(3);
             q.Process += item =>
             {
                 try

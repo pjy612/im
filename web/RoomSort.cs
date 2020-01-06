@@ -8,16 +8,16 @@ using XCode.DataAccessLayer;
 
 namespace BiliEntity
 {
-    /// <summary>房间状态表</summary>
+    /// <summary>房间统计排序表</summary>
     [Serializable]
     [DataObject]
-    [Description("房间状态表")]
+    [Description("房间统计排序表")]
     [BindIndex("PRIMARY", true, "room_id")]
     [BindIndex("idx_room_id", false, "room_id")]
     [BindIndex("idx_uid", false, "uid")]
     [BindIndex("idx_last_update_time", false, "last_update_time")]
-    [BindTable("room_init_list", Description = "房间状态表", ConnName = "BiliCenter", DbType = DatabaseType.MySql)]
-    public partial class RoomInitList<TEntity> : IRoomInitList
+    [BindTable("room_sort", Description = "房间统计排序表", ConnName = "BiliCenter", DbType = DatabaseType.MySql)]
+    public partial class RoomSort<TEntity> : IRoomSort
     {
         #region 属性
         private Int64 _RoomID;
@@ -44,16 +44,40 @@ namespace BiliEntity
             set { if (OnPropertyChanging(__.Uid, value)) { _Uid = value; OnPropertyChanged(__.Uid); } }
         }
 
-        private String _Message;
-        /// <summary>房间返回值</summary>
-        [DisplayName("房间返回值")]
-        [Description("房间返回值")]
+        private Int64 _FansNum;
+        /// <summary>粉丝牌量</summary>
+        [DisplayName("粉丝牌量")]
+        [Description("粉丝牌量")]
         [DataObjectField(false, false, false, 0)]
-        [BindColumn("message", "房间返回值", "longtext")]
-        public virtual String Message
+        [BindColumn("fans_num", "粉丝牌量", "bigint(20)")]
+        public virtual Int64 FansNum
         {
-            get { return _Message; }
-            set { if (OnPropertyChanging(__.Message, value)) { _Message = value; OnPropertyChanged(__.Message); } }
+            get { return _FansNum; }
+            set { if (OnPropertyChanging(__.FansNum, value)) { _FansNum = value; OnPropertyChanged(__.FansNum); } }
+        }
+
+        private Int64 _FollowNum;
+        /// <summary>关注数量</summary>
+        [DisplayName("关注数量")]
+        [Description("关注数量")]
+        [DataObjectField(false, false, false, 0)]
+        [BindColumn("follow_num", "关注数量", "bigint(20)")]
+        public virtual Int64 FollowNum
+        {
+            get { return _FollowNum; }
+            set { if (OnPropertyChanging(__.FollowNum, value)) { _FollowNum = value; OnPropertyChanged(__.FollowNum); } }
+        }
+
+        private Int64 _GuardNum;
+        /// <summary>舰队数量</summary>
+        [DisplayName("舰队数量")]
+        [Description("舰队数量")]
+        [DataObjectField(false, false, false, 0)]
+        [BindColumn("guard_num", "舰队数量", "bigint(20)")]
+        public virtual Int64 GuardNum
+        {
+            get { return _GuardNum; }
+            set { if (OnPropertyChanging(__.GuardNum, value)) { _GuardNum = value; OnPropertyChanged(__.GuardNum); } }
         }
 
         private DateTime _LastUpdateTime;
@@ -85,7 +109,9 @@ namespace BiliEntity
                 {
                     case __.RoomID : return _RoomID;
                     case __.Uid : return _Uid;
-                    case __.Message : return _Message;
+                    case __.FansNum : return _FansNum;
+                    case __.FollowNum : return _FollowNum;
+                    case __.GuardNum : return _GuardNum;
                     case __.LastUpdateTime : return _LastUpdateTime;
                     default: return base[name];
                 }
@@ -96,7 +122,9 @@ namespace BiliEntity
                 {
                     case __.RoomID : _RoomID = Convert.ToInt64(value); break;
                     case __.Uid : _Uid = Convert.ToInt64(value); break;
-                    case __.Message : _Message = Convert.ToString(value); break;
+                    case __.FansNum : _FansNum = Convert.ToInt64(value); break;
+                    case __.FollowNum : _FollowNum = Convert.ToInt64(value); break;
+                    case __.GuardNum : _GuardNum = Convert.ToInt64(value); break;
                     case __.LastUpdateTime : _LastUpdateTime = Convert.ToDateTime(value); break;
                     default: base[name] = value; break;
                 }
@@ -105,7 +133,7 @@ namespace BiliEntity
         #endregion
 
         #region 字段名
-        /// <summary>取得房间状态表字段信息的快捷方式</summary>
+        /// <summary>取得房间统计排序表字段信息的快捷方式</summary>
         public partial class _
         {
             ///<summary>房间号</summary>
@@ -114,8 +142,14 @@ namespace BiliEntity
             ///<summary>用户Id</summary>
             public static readonly Field Uid = FindByName(__.Uid);
 
-            ///<summary>房间返回值</summary>
-            public static readonly Field Message = FindByName(__.Message);
+            ///<summary>粉丝牌量</summary>
+            public static readonly Field FansNum = FindByName(__.FansNum);
+
+            ///<summary>关注数量</summary>
+            public static readonly Field FollowNum = FindByName(__.FollowNum);
+
+            ///<summary>舰队数量</summary>
+            public static readonly Field GuardNum = FindByName(__.GuardNum);
 
             ///<summary>最后更新时间</summary>
             public static readonly Field LastUpdateTime = FindByName(__.LastUpdateTime);
@@ -123,7 +157,7 @@ namespace BiliEntity
             static Field FindByName(String name) { return Meta.Table.FindByName(name); }
         }
 
-        /// <summary>取得房间状态表字段名称的快捷方式</summary>
+        /// <summary>取得房间统计排序表字段名称的快捷方式</summary>
         partial class __
         {
             ///<summary>房间号</summary>
@@ -132,8 +166,14 @@ namespace BiliEntity
             ///<summary>用户Id</summary>
             public const String Uid = "Uid";
 
-            ///<summary>房间返回值</summary>
-            public const String Message = "Message";
+            ///<summary>粉丝牌量</summary>
+            public const String FansNum = "FansNum";
+
+            ///<summary>关注数量</summary>
+            public const String FollowNum = "FollowNum";
+
+            ///<summary>舰队数量</summary>
+            public const String GuardNum = "GuardNum";
 
             ///<summary>最后更新时间</summary>
             public const String LastUpdateTime = "LastUpdateTime";
@@ -142,8 +182,8 @@ namespace BiliEntity
         #endregion
     }
 
-    /// <summary>房间状态表接口</summary>
-    public partial interface IRoomInitList
+    /// <summary>房间统计排序表接口</summary>
+    public partial interface IRoomSort
     {
         #region 属性
         /// <summary>房间号</summary>
@@ -152,8 +192,14 @@ namespace BiliEntity
         /// <summary>用户Id</summary>
         Int64 Uid { get; set; }
 
-        /// <summary>房间返回值</summary>
-        String Message { get; set; }
+        /// <summary>粉丝牌量</summary>
+        Int64 FansNum { get; set; }
+
+        /// <summary>关注数量</summary>
+        Int64 FollowNum { get; set; }
+
+        /// <summary>舰队数量</summary>
+        Int64 GuardNum { get; set; }
 
         /// <summary>最后更新时间</summary>
         DateTime LastUpdateTime { get; set; }
