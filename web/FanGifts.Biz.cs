@@ -99,7 +99,7 @@ namespace BiliEntity
         [DataObjectMethod(DataObjectMethodType.Select, false)]
         public static IList<TEntity> FindAllByLastUpdateTimeLimit(int minutes)
         {
-            return Meta.Cache.FindAll(e => e.LastUpdateTime <= DateTime.Now.AddMinutes(minutes));
+            return FindAll(_.LastUpdateTime <= DateTime.Now.AddMinutes(minutes));
         }
 
         /// <summary>根据房间号查找</summary>

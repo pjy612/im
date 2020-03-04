@@ -1,11 +1,14 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
 using BiliEntity;
 using NewLife.Http;
 using NewLife.Log;
 using NewLife.Serialization;
+using NewLife.Threading;
 using Newtonsoft.Json;
 using RestSharp;
 using RestSharp.Serialization.Json;
@@ -17,158 +20,105 @@ namespace web
     {
         private static TinyHttpClient httpClient = new TinyHttpClient();
 
-        public static Lazy<WorkQueue<long>> RoomInitQueue = new Lazy<WorkQueue<long>>(() =>
+        readonly BlockingCollection<long> ProcessCollection = new BlockingCollection<long>();
+        public HashSet<long> QueueRoomSet = new HashSet<long>();
+
+        public RoomQueue()
         {
-            var q = new WorkQueue<long>(3);
-            q.Process += item =>
+            var timerX = new TimerX(state =>
             {
-                try
+                long[] ids = QueueRoomSet.ToArray();
+                foreach (var id in ids)
                 {
-                    RoomInitList roomInit = RoomInitList.FindByKey(item) ?? new RoomInitList() {RoomID = item, LastUpdateTime = DateTime.MinValue};
-                    if (roomInit.LastUpdateTime < DateTime.Now)
-                    {
-                        //请求 更新 入库
-                        RoomInit init = GetRoomInitByRoomId(item);
-                        if (init.Code == 0)
-                        {
-                            GetFollowNumQueue.Value.Enqueue(init.Data.Uid);
-                            GuardTopQueue.Value.Enqueue(init.Data.Uid);
-                            roomInit.Message        = JsonConvert.SerializeObject(init);
-                            roomInit.LastUpdateTime = DateTime.Now.AddMinutes(30);
-                            roomInit.SaveAsync();
-                        }
-                        System.Threading.Thread.CurrentThread.Join(TimeSpan.FromSeconds(1));
-                    }
-                    else
-                    {
-                        if (!roomInit.Message.IsNullOrWhiteSpace())
-                        {
-                            try
-                            {
-                                RoomInit init = JsonConvert.DeserializeObject<RoomInit>(roomInit.Message);
-                                if (init.Code == 0)
-                                {
-                                    GetFollowNumQueue.Value.Enqueue(init.Data.Uid);
-                                    GuardTopQueue.Value.Enqueue(init.Data.Uid);
-                                }
-                            }
-                            catch
-                            {
-                            }
-                        }
-                    }
-                    GetFanGiftsQueue.Value.Enqueue(item);
+                    QueueRoomSet.Remove(id);
+                    ProcessCollection.Add(id);
                 }
-                catch
+            }, null, 1000, 1000);
+            Task.Run(() =>
+            {
+                foreach (var item in ProcessCollection.GetConsumingEnumerable())
                 {
-                    System.Threading.Thread.CurrentThread.Join(TimeSpan.FromSeconds(3));
-                    q.Enqueue(item);
+                    RoomSortForce(item);
                 }
-            };
-            //遍历目前需要刷新的数据
-            RoomInitList.FindAllByLastUpdateTimeLimit(30).ToList().ForEach(r => q.Enqueue(r.RoomID));
+            });
+        }
+
+        public static Lazy<RoomQueue> QueueLazy = new Lazy<RoomQueue>(() =>
+        {
+            RoomQueue q = new RoomQueue();
             return q;
         });
 
-        public static Lazy<WorkQueue<long>> GetFanGiftsQueue = new Lazy<WorkQueue<long>>(() =>
+        public RoomSort RoomSortForce(long id)
         {
-            var q = new WorkQueue<long>(2);
-            q.Process += item =>
+            RoomInitList room = RoomInitList.FindByKey(id);
+            if (room == null || room?.LastUpdateTime < DateTime.Now.AddDays(-3))
             {
-                try
+                RoomInit init = RoomQueue.GetRoomInitByRoomId(id);
+                if (init?.Code == 0)
                 {
-                    FanGifts entity = FanGifts.FindByKey(item) ?? new FanGifts() {RoomID = item, LastUpdateTime = DateTime.MinValue};
-                    if (entity.LastUpdateTime < DateTime.Now)
-                    {
-                        //请求 更新 入库
-                        RoomRsp<GiftTopDto> fanGiftsByRoomId = GetFanGiftsByRoomId(item);
-                        if (fanGiftsByRoomId.Code == 0)
-                        {
-                            entity.Num            = fanGiftsByRoomId.Data.List.Count;
-                            entity.Message        = JsonConvert.SerializeObject(fanGiftsByRoomId);
-                            entity.LastUpdateTime = DateTime.Now.AddMinutes(30);
-                            entity.SaveAsync();
-                        }
-                        System.Threading.Thread.CurrentThread.Join(TimeSpan.FromSeconds(1));
-                    }
+                    room                = new RoomInitList() {RoomID = id};
+                    room.Uid            = init.Data.Uid;
+                    room.Message        = JsonConvert.SerializeObject(init);
+                    room.LastUpdateTime = DateTime.Now;
+                    room.SaveAsync();
+                    goto beginNext;
                 }
-                catch
-                {
-                    System.Threading.Thread.CurrentThread.Join(TimeSpan.FromSeconds(3));
-                    q.Enqueue(item);
-                }
-            };
-            //遍历目前需要刷新的数据
-            FanGifts.FindAllByLastUpdateTimeLimit(30).ToList().ForEach(r => q.Enqueue(r.RoomID));
-            return q;
-        });
-
-
-        public static Lazy<WorkQueue<long>> GuardTopQueue = new Lazy<WorkQueue<long>>(() =>
-        {
-            var q = new WorkQueue<long>(2);
-            q.Process += item =>
+                return null;
+            }
+            beginNext:
+            FanGifts fan = FanGifts.FindByKey(room.RoomID);
+            GuardTop guardTop = GuardTop.FindByKey(room.Uid);
+            FollowNum followNum = FollowNum.FindByKey(room.Uid);
+            if (fan == null || fan?.LastUpdateTime < DateTime.Now.AddDays(-3))
             {
-                try
+                RoomRsp<GiftTopDto> fanGiftsByRoomId = RoomQueue.GetFanGiftsByRoomId(room.RoomID);
+                if (fanGiftsByRoomId?.Code == 0)
                 {
-                    GuardTop entity = GuardTop.FindByKey(item) ?? new GuardTop() {Uid = item, LastUpdateTime = DateTime.MinValue};
-                    if (entity.LastUpdateTime < DateTime.Now)
-                    {
-                        //请求 更新 入库
-                        RoomRsp<GuardTopDto> dto = GetGuardTopByUid(item);
-                        if (dto.Code == 0)
-                        {
-                            entity.Num            = dto.Data?.Info?.Num ?? 0;
-                            entity.Data           = JsonConvert.SerializeObject(dto);
-                            entity.LastUpdateTime = DateTime.Now.AddMinutes(30);
-                            entity.SaveAsync();
-                        }
-                        System.Threading.Thread.CurrentThread.Join(TimeSpan.FromSeconds(1));
-                    }
+                    fan                = new FanGifts() {RoomID = room.RoomID};
+                    fan.Num            = fanGiftsByRoomId.Data.List.Count;
+                    fan.Message        = JsonConvert.SerializeObject(fanGiftsByRoomId);
+                    fan.LastUpdateTime = DateTime.Now;
+                    fan.SaveAsync();
                 }
-                catch
-                {
-                    System.Threading.Thread.CurrentThread.Join(TimeSpan.FromSeconds(3));
-                    q.Enqueue(item);
-                }
-            };
-            //遍历目前需要刷新的数据
-            GuardTop.FindAllByLastUpdateTimeLimit(30).ToList().ForEach(r => q.Enqueue(r.Uid));
-            return q;
-        });
-
-        public static Lazy<WorkQueue<long>> GetFollowNumQueue = new Lazy<WorkQueue<long>>(() =>
-        {
-            var q = new WorkQueue<long>(2);
-            q.Process += item =>
+            }
+            if (guardTop == null || guardTop?.LastUpdateTime < DateTime.Now.AddDays(-3))
             {
-                try
+                RoomRsp<GuardTopDto> dto = RoomQueue.GetGuardTopByUid(room.Uid);
+                if (dto?.Code == 0)
                 {
-                    FollowNum entity = FollowNum.FindByKey(item) ?? new FollowNum() {Uid = item, LastUpdateTime = DateTime.MinValue};
-                    if (entity.LastUpdateTime < DateTime.Now)
-                    {
-                        //请求 更新 入库
-                        RoomRsp<FollowNumDto> followNumByUid = GetFollowNumByUid(item);
-                        if (followNumByUid.Code == 0)
-                        {
-                            entity.Num            = followNumByUid.Data.Fc;
-                            entity.Data           = JsonConvert.SerializeObject(followNumByUid);
-                            entity.LastUpdateTime = DateTime.Now.AddMinutes(30);
-                            entity.SaveAsync();
-                        }
-                        System.Threading.Thread.CurrentThread.Join(TimeSpan.FromSeconds(1));
-                    }
+                    guardTop                = new GuardTop() {Uid = room.Uid};
+                    guardTop.Num            = dto.Data?.Info?.Num ?? 0;
+                    guardTop.Data           = JsonConvert.SerializeObject(dto);
+                    guardTop.LastUpdateTime = DateTime.Now;
+                    guardTop.SaveAsync();
                 }
-                catch
+            }
+            if (followNum == null || followNum?.LastUpdateTime < DateTime.Now.AddDays(-3))
+            {
+                RoomRsp<FollowNumDto> followNumByUid = RoomQueue.GetFollowNumByUid(room.Uid);
+                if (followNumByUid?.Code == 0)
                 {
-                    System.Threading.Thread.CurrentThread.Join(TimeSpan.FromSeconds(3));
-                    q.Enqueue(item);
+                    followNum                = new FollowNum() {Uid = id};
+                    followNum.Num            = followNumByUid.Data.Fc;
+                    followNum.Data           = JsonConvert.SerializeObject(followNumByUid);
+                    followNum.LastUpdateTime = DateTime.Now;
+                    followNum.SaveAsync();
                 }
-            };
-            //遍历目前需要刷新的数据
-            FollowNum.FindAllByLastUpdateTimeLimit(30).ToList().ForEach(r => q.Enqueue(r.Uid));
-            return q;
-        });
+            }
+            if (followNum != null && guardTop != null && fan != null && room != null)
+            {
+                var entity = RoomSort.FindByKey(id) ?? new RoomSort() {RoomID = id};
+                entity.Uid            = room.Uid;
+                entity.FansNum        = fan?.Num       ?? 0;
+                entity.FollowNum      = followNum?.Num ?? 0;
+                entity.GuardNum       = guardTop?.Num  ?? 0;
+                entity.LastUpdateTime = DateTime.Now;
+                entity.SaveAsync();
+                return entity;
+            }
+            return null;
+        }
 
         public static RoomInit GetRoomInitByRoomId(long roomid)
         {
@@ -176,14 +126,26 @@ namespace web
             {
                 RestClient client = new RestClient();
                 RestRequest request = new RestRequest($"https://api.live.bilibili.com/room/v1/Room/room_init?id={roomid}", Method.GET);
-                IRestResponse<RoomInit> execute = client.Execute<RoomInit>(request);
-                return execute.Data;
+                IRestResponse<RoomRsp<RoomInfoData>> execute = client.Execute<RoomRsp<RoomInfoData>>(request);
+                if (execute.StatusCode == HttpStatusCode.OK)
+                {
+                    if (execute.Data != null && execute.Data.Code == 0)
+                    {
+                        return execute.Data.ToJson().ToJsonEntity<RoomInit>();
+                    }
+                    else
+                    {
+                        Console.WriteLine($"GetRoomInitByRoomId:{roomid}:{execute.Content}");
+                    }
+                    RoomInitList.FindByKey(roomid)?.Delete();
+                    RoomSort.FindByKey(roomid)?.Delete();
+                }
             }
             catch (Exception e)
             {
                 XTrace.WriteException(e);
-                return null;
             }
+            return null;
         }
 
         public static RoomRsp<GiftTopDto> GetFanGiftsByRoomId(long roomid)
@@ -193,13 +155,24 @@ namespace web
                 RestClient client = new RestClient();
                 RestRequest request = new RestRequest($"https://api.live.bilibili.com/AppRoom/getGiftTop?room_id={roomid}", Method.GET);
                 IRestResponse<RoomRsp<GiftTopDto>> execute = client.Execute<RoomRsp<GiftTopDto>>(request);
-                return execute.Data;
+                if (execute.StatusCode == HttpStatusCode.OK)
+                {
+                    if (execute.Data.Code == 0)
+                    {
+                        return execute.Data;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"GetFanGiftsByRoomId:{roomid}:{execute.Content}");
+                    }
+                    FanGifts.FindByKey(roomid)?.Delete();
+                }
             }
             catch (Exception e)
             {
                 XTrace.WriteException(e);
-                return null;
             }
+            return null;
         }
 
         public static RoomRsp<GuardTopDto> GetGuardTopByUid(long uid)
@@ -209,13 +182,24 @@ namespace web
                 RestClient client = new RestClient();
                 RestRequest request = new RestRequest($"https://api.live.bilibili.com/guard/topList?ruid={uid}&page=1", Method.GET);
                 IRestResponse<RoomRsp<GuardTopDto>> execute = client.Execute<RoomRsp<GuardTopDto>>(request);
-                return execute.Data;
+                if (execute.StatusCode == HttpStatusCode.OK)
+                {
+                    if (execute.Data != null && execute.Data.Code == 0)
+                    {
+                        return execute.Data;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"GetGuardTopByUid:{uid}:{execute.Content}");
+                    }
+                    GuardTop.FindByKey(uid)?.Delete();
+                }
             }
             catch (Exception e)
             {
                 XTrace.WriteException(e);
-                return null;
             }
+            return null;
         }
 
         public static RoomRsp<FollowNumDto> GetFollowNumByUid(long uid)
@@ -225,13 +209,24 @@ namespace web
                 RestClient client = new RestClient();
                 RestRequest request = new RestRequest($"https://api.live.bilibili.com/relation/v1/Feed/GetUserFc?follow={uid}", Method.GET);
                 IRestResponse<RoomRsp<FollowNumDto>> execute = client.Execute<RoomRsp<FollowNumDto>>(request);
-                return execute.Data;
+                if (execute.StatusCode == HttpStatusCode.OK)
+                {
+                    if (execute.Data != null && execute.Data.Code == 0)
+                    {
+                        return execute.Data;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"GetFollowNumByUid:{uid}:{execute.Content}");
+                    }
+                    FollowNum.FindByKey(uid)?.Delete();
+                }
             }
             catch (Exception e)
             {
                 XTrace.WriteException(e);
-                return null;
             }
+            return null;
         }
     }
 
@@ -269,105 +264,105 @@ namespace web
         /// </summary>
         [JsonProperty("msg")]
         public string Msg { get; set; }
+    }
 
-        public class RoomInfoData
-        {
-            /// <summary>
-            /// Examples: false
-            /// </summary>
-            [JsonProperty("encrypted")]
-            public bool Encrypted { get; set; }
+    public class RoomInfoData
+    {
+        /// <summary>
+        /// Examples: false
+        /// </summary>
+        [JsonProperty("encrypted")]
+        public bool Encrypted { get; set; }
 
-            /// <summary>
-            /// Examples: 0
-            /// </summary>
-            [JsonProperty("hidden_till")]
-            public long HiddenTill { get; set; }
+        /// <summary>
+        /// Examples: 0
+        /// </summary>
+        [JsonProperty("hidden_till")]
+        public long HiddenTill { get; set; }
 
-            /// <summary>
-            /// Examples: false
-            /// </summary>
-            [JsonProperty("is_hidden")]
-            public bool IsHidden { get; set; }
+        /// <summary>
+        /// Examples: false
+        /// </summary>
+        [JsonProperty("is_hidden")]
+        public bool IsHidden { get; set; }
 
-            /// <summary>
-            /// Examples: false
-            /// </summary>
-            [JsonProperty("is_locked")]
-            public bool IsLocked { get; set; }
+        /// <summary>
+        /// Examples: false
+        /// </summary>
+        [JsonProperty("is_locked")]
+        public bool IsLocked { get; set; }
 
-            /// <summary>
-            /// Examples: false
-            /// </summary>
-            [JsonProperty("is_portrait")]
-            public bool IsPortrait { get; set; }
+        /// <summary>
+        /// Examples: false
+        /// </summary>
+        [JsonProperty("is_portrait")]
+        public bool IsPortrait { get; set; }
 
-            /// <summary>
-            /// Examples: 0
-            /// </summary>
-            [JsonProperty("is_sp")]
-            public long IsSp { get; set; }
+        /// <summary>
+        /// Examples: 0
+        /// </summary>
+        [JsonProperty("is_sp")]
+        public long IsSp { get; set; }
 
-            /// <summary>
-            /// Examples: 0
-            /// </summary>
-            [JsonProperty("live_status")]
-            public long LiveStatus { get; set; }
+        /// <summary>
+        /// Examples: 0
+        /// </summary>
+        [JsonProperty("live_status")]
+        public long LiveStatus { get; set; }
 
-            /// <summary>
-            /// Examples: -62170012800
-            /// </summary>
-            [JsonProperty("live_time")]
-            public long LiveTime { get; set; }
+        /// <summary>
+        /// Examples: -62170012800
+        /// </summary>
+        [JsonProperty("live_time")]
+        public long LiveTime { get; set; }
 
-            /// <summary>
-            /// Examples: 0
-            /// </summary>
-            [JsonProperty("lock_till")]
-            public long LockTill { get; set; }
+        /// <summary>
+        /// Examples: 0
+        /// </summary>
+        [JsonProperty("lock_till")]
+        public long LockTill { get; set; }
 
-            /// <summary>
-            /// Examples: 0
-            /// </summary>
-            [JsonProperty("need_p2p")]
-            public int NeedP2p { get; set; }
+        /// <summary>
+        /// Examples: 0
+        /// </summary>
+        [JsonProperty("need_p2p")]
+        public int NeedP2p { get; set; }
 
-            /// <summary>
-            /// Examples: false
-            /// </summary>
-            [JsonProperty("pwd_verified")]
-            public bool PwdVerified { get; set; }
+        /// <summary>
+        /// Examples: false
+        /// </summary>
+        [JsonProperty("pwd_verified")]
+        public bool PwdVerified { get; set; }
 
-            /// <summary>
-            /// Examples: 15167351
-            /// </summary>
-            [JsonProperty("room_id")]
-            public long RoomId { get; set; }
+        /// <summary>
+        /// Examples: 15167351
+        /// </summary>
+        [JsonProperty("room_id")]
+        public long RoomId { get; set; }
 
-            /// <summary>
-            /// Examples: 0
-            /// </summary>
-            [JsonProperty("room_shield")]
-            public long RoomShield { get; set; }
+        /// <summary>
+        /// Examples: 0
+        /// </summary>
+        [JsonProperty("room_shield")]
+        public long RoomShield { get; set; }
 
-            /// <summary>
-            /// Examples: 0
-            /// </summary>
-            [JsonProperty("short_id")]
-            public long ShortId { get; set; }
+        /// <summary>
+        /// Examples: 0
+        /// </summary>
+        [JsonProperty("short_id")]
+        public long ShortId { get; set; }
 
-            /// <summary>
-            /// Examples: 0
-            /// </summary>
-            [JsonProperty("special_type")]
-            public long SpecialType { get; set; }
+        /// <summary>
+        /// Examples: 0
+        /// </summary>
+        [JsonProperty("special_type")]
+        public long SpecialType { get; set; }
 
-            /// <summary>
-            /// Examples: 388563921
-            /// </summary>
-            [JsonProperty("uid")]
-            public long Uid { get; set; }
-        }
+        /// <summary>
+        /// Examples: 388563921
+        /// </summary>
+        [JsonProperty("uid")]
+        public long Uid { get; set; }
     }
 
     public class RoomRsp<T>

@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
+using NewLife.Caching;
 
 /// <summary>
 /// im 核心类实现的配置所需
@@ -112,14 +114,23 @@ public class ImClient
     /// <returns>websocket 地址：ws://xxxx/ws?token=xxx</returns>
     public string PrevConnectServer(Guid clientId, string clientMetaData)
     {
-        
         var server = SelectServer(clientId);
-        var token = $"{Guid.NewGuid()}{Guid.NewGuid()}".Replace("-", "");
-        Console.WriteLine($"PrevConnectServer:{clientId},clientMetaData:{clientMetaData},token:{token}");
-        bool ret = false;
-        while (!ret)
+        string clientKey = clientId.ToString().Replace("-", "");
+        int timeout = 60;
+        var token = Cache.Default.Get<string>($"UserToken_{clientKey}");
+        if (string.IsNullOrWhiteSpace(token))
         {
-            ret = _redis.Set($"{_redisPrefix}Token{token}", JsonConvert.SerializeObject((clientId, clientMetaData)), 10);
+            token = $"{Guid.NewGuid()}{Guid.NewGuid()}".Replace("-", "");
+            Cache.Default.Set($"UserToken_{clientKey}", token, timeout);
+        }
+        else
+        {
+            TimeSpan timeSpan = Cache.Default.GetExpire($"UserToken_{clientKey}");
+            timeout = timeSpan.Seconds;
+        }
+        while (!_redis.Exists($"{_redisPrefix}Token{token}"))
+        {
+            _redis.Set($"{_redisPrefix}Token{token}", JsonConvert.SerializeObject((clientId, clientMetaData)), timeout);
         }
         return $"wss://{server}{_pathMatch}?token={token}";
     }
@@ -226,23 +237,25 @@ public class ImClient
     /// <param name="chans">群聊频道名</param>
     public void LeaveChan(Guid clientId, params string[] chans)
     {
-        try
+        Task.Run(() =>
         {
-            if (chans?.Any() != true) return;
-            using (var pipe = _redis.StartPipe())
+            try
             {
-                foreach (var chan in chans)
-                    pipe
-                        .HDel($"{_redisPrefix}Chan{chan}", clientId.ToString())
-                        .HDel($"{_redisPrefix}Client{clientId}", chan)
-                        .Eval($"if redis.call('HINCRBY', KEYS[1], '{chan}', '-1') <= 0 then redis.call('HDEL', KEYS[1], '{chan}') end return 1",
-                            $"{_redisPrefix}ListChan");
+                if (chans?.Any() != true) return;
+                using (var pipe = _redis.StartPipe())
+                {
+                    foreach (var chan in chans)
+                        pipe
+                            .HDel($"{_redisPrefix}Chan{chan}", clientId.ToString())
+                            .HDel($"{_redisPrefix}Client{clientId}", chan)
+                            .Eval($"if redis.call('HINCRBY', KEYS[1], '{chan}', '-1') <= 0 then redis.call('HDEL', KEYS[1], '{chan}') end return 1",
+                                $"{_redisPrefix}ListChan");
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            
-        }
+            catch (Exception ex)
+            {
+            }
+        });
     }
 
     /// <summary>

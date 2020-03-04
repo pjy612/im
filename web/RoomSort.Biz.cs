@@ -14,7 +14,9 @@ namespace BiliEntity
 {
     /// <summary>房间统计排序表</summary>
     [ModelCheckMode(ModelCheckModes.CheckTableWhenFirstUse)]
-    public class RoomSort : RoomSort<RoomSort> { }
+    public class RoomSort : RoomSort<RoomSort> {
+       
+    }
     
     /// <summary>房间统计排序表</summary>
     public partial class RoomSort<TEntity> : Entity<TEntity> where TEntity : RoomSort<TEntity>, new()
@@ -91,7 +93,11 @@ namespace BiliEntity
         #endregion
 
         #region 扩展查询
-            ﻿
+
+        public static IList<TEntity> FindAllByLastUpdateTimeLimit(int minutes)
+        {
+            return FindAll(_.LastUpdateTime <= DateTime.Now.AddMinutes(minutes));
+        }
         /// <summary>根据房间号查找</summary>
         /// <param name="roomid">房间号</param>
         /// <returns></returns>

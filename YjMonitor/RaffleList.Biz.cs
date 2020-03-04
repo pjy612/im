@@ -6,26 +6,24 @@ using System.Xml.Serialization;
 using NewLife.Log;
 using NewLife.Web;
 using NewLife.Data;
-using Newtonsoft.Json;
-using web;
 using XCode;
 using XCode.Configuration;
 using XCode.Membership;
 
 namespace BiliEntity
 {
-    /// <summary>房间状态表</summary>
+    /// <summary>礼物监控表</summary>
     [ModelCheckMode(ModelCheckModes.CheckTableWhenFirstUse)]
-    public class RoomInitList : RoomInitList<RoomInitList>
+    public class RaffleList : RaffleList<RaffleList>
     {
     }
 
-    /// <summary>房间状态表</summary>
-    public partial class RoomInitList<TEntity> : Entity<TEntity> where TEntity : RoomInitList<TEntity>, new()
+    /// <summary>礼物监控表</summary>
+    public partial class RaffleList<TEntity> : Entity<TEntity> where TEntity : RaffleList<TEntity>, new()
     {
         #region 对象操作
 
-        static RoomInitList()
+        static RaffleList()
         {
             // 用于引发基类的静态构造函数，所有层次的泛型实体类都应该有一个
             TEntity entity = new TEntity();
@@ -47,6 +45,8 @@ namespace BiliEntity
 
             // 在新插入数据或者修改了指定字段时进行唯一性验证，CheckExist内部抛出参数异常
             //if (isNew || Dirtys[__.Name]) CheckExist(__.Name);
+
+            if (isNew && !Dirtys[__.CreateAt]) CreateAt = DateTime.Now;
         }
 
         ///// <summary>首次连接数据库时初始化数据，仅用于实体类重载，用户不应该调用该方法</summary>
@@ -62,10 +62,16 @@ namespace BiliEntity
         //    // 需要注意的是，如果该方法调用了其它实体类的首次数据库操作，目标实体类的数据初始化将会在同一个线程完成
         //    if (XTrace.Debug) XTrace.WriteLine("开始初始化{0}[{1}]数据……", typeof(TEntity).Name, Meta.Table.DataTable.DisplayName);
 
-        //    var entity = new RoomInitList();
+        //    var entity = new RaffleList();
+        //    entity.RaffleID = 0;
+        //    entity.RaffleType = "abc";
+        //    entity.RaffleIDSort = 0;
+        //    entity.TvType = "abc";
+        //    entity.GuardType = "abc";
         //    entity.RoomID = 0;
-        //    entity.Message = "abc";
-        //    entity.LastUpdateTime = DateTime.Now;
+        //    entity.EndTime = DateTime.Now;
+        //    entity.Data = "abc";
+        //    entity.CreateAt = DateTime.Now;
         //    entity.Insert();
 
         //    if (XTrace.Debug) XTrace.WriteLine("完成初始化{0}[{1}]数据！", typeof(TEntity).Name, Meta.Table.DataTable.DisplayName);
@@ -89,44 +95,76 @@ namespace BiliEntity
 
         #region 扩展属性
 
-        public RoomInit Data => Extends.Get(nameof(Data),k=> JsonConvert.DeserializeObject<RoomInit>(Message));
-
         #endregion
 
         #region 扩展查询
 
-        /// <summary>根据房间号查找</summary>
-        /// <param name="roomid">房间号</param>
-        /// <returns></returns>
         [DataObjectMethod(DataObjectMethodType.Select, false)]
-        public static IList<TEntity> FindAllByRoomID(Int64 roomid)
+        public static TEntity FindByRaffleIDAndType(Int64 raffleid, string type)
         {
-            if (Meta.Count >= 1000)
-                return FindAll(__.RoomID, roomid);
-            else // 实体缓存
-                return Meta.Cache.FindAll(e => e.RoomID == roomid);
+           return Find(new[] {__.RaffleID, __.RaffleType}, new Object[] {raffleid, type});
         }
 
-        /// <summary>根据最后更新时间查找</summary>
-        /// <param name="lastupdatetime">最后更新时间</param>
+        /// <summary>根据礼物Id查找</summary>
+        /// <param name="raffleid">礼物Id</param>
         /// <returns></returns>
         [DataObjectMethod(DataObjectMethodType.Select, false)]
-        public static IList<TEntity> FindAllByLastUpdateTime(DateTime lastupdatetime)
+        public static TEntity FindByRaffleID(Int64 raffleid)
         {
             if (Meta.Count >= 1000)
-                return FindAll(__.LastUpdateTime, lastupdatetime);
+                return Find(__.RaffleID, raffleid);
             else // 实体缓存
-                return Meta.Cache.FindAll(e => e.LastUpdateTime == lastupdatetime);
+                return Meta.Cache.Find(e => e.RaffleID == raffleid);
+            // 单对象缓存
+            //return Meta.SingleCache[raffleid];
         }
-        /// <summary>
-        /// 根据
-        /// </summary>
-        /// <param name="minutes"></param>
+
+        /// <summary>根据领取结束时间查找</summary>
+        /// <param name="endtime">领取结束时间</param>
         /// <returns></returns>
         [DataObjectMethod(DataObjectMethodType.Select, false)]
-        public static IList<TEntity> FindAllByLastUpdateTimeLimit(int minutes)
+        public static IList<TEntity> FindAllByEndTime(DateTime endtime)
         {
-            return FindAll(_.LastUpdateTime <= DateTime.Now.AddMinutes(minutes));
+            if (Meta.Count >= 1000)
+                return FindAll(__.EndTime, endtime);
+            else // 实体缓存
+                return Meta.Cache.FindAll(e => e.EndTime == endtime);
+        }
+
+        /// <summary>根据创建时间查找</summary>
+        /// <param name="createat">创建时间</param>
+        /// <returns></returns>
+        [DataObjectMethod(DataObjectMethodType.Select, false)]
+        public static IList<TEntity> FindAllByCreateAt(DateTime createat)
+        {
+            if (Meta.Count >= 1000)
+                return FindAll(__.CreateAt, createat);
+            else // 实体缓存
+                return Meta.Cache.FindAll(e => e.CreateAt == createat);
+        }
+
+        /// <summary>根据礼物Id 排序查找</summary>
+        /// <param name="raffleidsort">礼物Id 排序</param>
+        /// <returns></returns>
+        [DataObjectMethod(DataObjectMethodType.Select, false)]
+        public static IList<TEntity> FindAllByRaffleIDSort(Int64 raffleidsort)
+        {
+            if (Meta.Count >= 1000)
+                return FindAll(__.RaffleIDSort, raffleidsort);
+            else // 实体缓存
+                return Meta.Cache.FindAll(e => e.RaffleIDSort == raffleidsort);
+        }
+
+        /// <summary>根据礼物类型查找</summary>
+        /// <param name="raffletype">礼物类型</param>
+        /// <returns></returns>
+        [DataObjectMethod(DataObjectMethodType.Select, false)]
+        public static IList<TEntity> FindAllByRaffleType(String raffletype)
+        {
+            if (Meta.Count >= 1000)
+                return FindAll(__.RaffleType, raffletype);
+            else // 实体缓存
+                return Meta.Cache.FindAll(e => e.RaffleType == raffletype);
         }
 
         #endregion

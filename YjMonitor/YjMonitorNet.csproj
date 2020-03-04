@@ -7,12 +7,24 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Program.cs~RFb6cc07c.TMP" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="12.0.2" />
+    <PackageReference Include="RestSharp" Version="106.6.10" />
+    <PackageReference Include="WorkQueue" Version="1.0.5" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\NewLifeX\X\NewLife.Core\NewLife.Core.csproj" />
     <ProjectReference Include="..\ImCore\ImCore.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="XCode">
+      <HintPath>..\..\..\NewLifeX\Bin\netstandard2.0\XCode.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>

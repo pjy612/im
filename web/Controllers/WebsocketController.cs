@@ -1,11 +1,14 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using BiliEntity;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using NewLife.Caching;
+using NewLife.Threading;
 using Newtonsoft.Json;
 
 namespace web.Controllers
@@ -16,21 +19,37 @@ namespace web.Controllers
         public string Ip => this.Request.Headers["X-Real-IP"].FirstOrDefault() ?? this.Request.HttpContext.Connection.RemoteIpAddress.ToString();
         public string referer => this.Request.Headers["Referer"].FirstOrDefault();
         public string UA => this.Request.Headers["User-Agent"].FirstOrDefault();
-
         /// <summary>
         /// 获取websocket分区
         /// </summary>
         /// <param name="websocketId">本地标识，若无则不传，接口会返回新的，请保存本地localStoregy重复使用</param>
+        /// <param name="uid"></param>
         /// <returns></returns>
         [HttpPost("pre-connect")]
-        public object preConnect([FromForm] Guid? websocketId)
+        public object preConnect([FromForm] Guid? websocketId, [FromForm] int? uid)
         {
             if (UA.ToLower().Contains("firefox"))
             {
                 return new {code = -1, msg = "请勿使用火狐浏览器"};
             }
-            if (websocketId == null) websocketId = Guid.NewGuid();
-            var wsserver = ImHelper.PrevConnectServer(websocketId.Value, $"IP:{this.Ip},Referer:{this.referer}");
+            if (!uid.HasValue)
+            {
+                return new { code = -1, msg = "请更新脚本至v2.4.3.17或以上" };
+            }
+            if (websocketId == null)
+            {
+                string guid = Cache.Default.Get<string>($"UserGuid_{uid.Value}");
+                if (guid.IsNullOrWhiteSpace())
+                {
+                    websocketId = Guid.NewGuid();
+                    Cache.Default.Set($"UserGuid_{uid.Value}", websocketId.Value.ToString(),TimeSpan.FromHours(1));
+                }
+                else
+                {
+                    websocketId = new Guid(guid);
+                }
+            }
+            var wsserver = ImHelper.PrevConnectServer(websocketId.Value, JsonConvert.SerializeObject(new {uid, Ip, referer}));
             return new
             {
                 code        = 0,
