@@ -102,7 +102,13 @@ namespace BiliEntity
         [DataObjectMethod(DataObjectMethodType.Select, false)]
         public static TEntity FindByRaffleIDAndType(Int64 raffleid, string type)
         {
-           return Find(new[] {__.RaffleID, __.RaffleType}, new Object[] {raffleid, type});
+            return Find(new[] {__.RaffleID, __.RaffleType}, new Object[] {raffleid, type});
+        }
+
+        [DataObjectMethod(DataObjectMethodType.Select, false)]
+        public static IList<TEntity> FindAllByRaffleIDsAndType(IList<Int64> raffleids, string type)
+        {
+            return FindAll(_.RaffleID.In(raffleids) & _.RaffleType == type);
         }
 
         /// <summary>根据礼物Id查找</summary>

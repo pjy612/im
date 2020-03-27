@@ -8,6 +8,25 @@ using System.Linq;
 using System.Threading.Tasks;
 using NewLife.Caching;
 
+public class ImClientInfo
+{
+    private Guid? _clientId;
+
+    public Guid clientId
+    {
+        get => _clientId ?? Guid.NewGuid();
+        set => _clientId = value;
+    }
+
+    public long uid { get; set; }
+    public string uname { get; set; }
+    public string Ip { get; set; }
+    public string referer { get; set; }
+    public string UA { get; set; }
+    public Version version { get; set; }
+    public string token => $"{uid}{Ip}{referer}{UA}".MD5();
+}
+
 /// <summary>
 /// im 核心类实现的配置所需
 /// </summary>
@@ -80,6 +99,86 @@ public class ImClient
     /// </summary>
     public EventHandler<ImSendEventArgs> OnSend;
 
+    public string heartOncejs(object val)
+    {
+        return @"
+        try
+        {
+            if(typeof(heartTimeout)!='undefined'){
+                clearTimeout(heartTimeout)
+            }
+            BiliPush.gsocket.send(JSON.stringify({ type: 'heart',data: '" + val + @"'}));
+        }
+        catch { }";
+    }
+
+    public string heartjs(object val)
+    {
+        return @"
+try{
+if(typeof(heartTimeout)!='undefined'){
+    clearTimeout(heartTimeout)
+}
+heartTimeout = setTimeout(()=>{
+    try
+    {
+        BiliPush.gsocket.send(JSON.stringify({ type: 'heart',data: '" + val + @"'}));
+    }
+    catch { }
+},30e3);
+}
+catch { }";
+
+    }
+
+    public const string messagejs = @"
+        try
+        {
+            window.alertdialog('魔改助手消息','{0}');
+        }
+        catch { }";
+
+    public const string reloadjs = @"
+try
+{
+    var reload = false;
+    if(livePlayer){
+        var info = livePlayer.getPlayerInfo();
+        if(info.playerType=='HTML5'){
+            livePlayer.reload();
+        }else{
+            reload = true;
+        }
+        if($('.bilibili-live-player-video').length==0){
+            reload = true;
+        }
+    }else{
+        reload = true;
+    }
+    if(reload){
+        localStorage.setItem('LIVE_PLAYER_STATUS',JSON.stringify({type:'html5',timeStamp:ts_ms()}));
+        var volume = localStorage.getItem('videoVolume')||0;
+        if(volume==0){
+            localStorage.setItem('videoVolume',0.1);
+        }
+        location.reload();
+    }
+}
+catch { }";
+
+    public const string forceReloadjs = @"
+try
+{    
+    localStorage.setItem('LIVE_PLAYER_STATUS',JSON.stringify({type:'html5',timeStamp:ts_ms()}));
+    var volume = localStorage.getItem('videoVolume')||0;
+    if(volume==0){
+        localStorage.setItem('videoVolume',0.1);
+    }
+    location.reload();
+}
+catch { }";
+
+
     /// <summary>
     /// 初始化 imclient
     /// </summary>
@@ -112,26 +211,11 @@ public class ImClient
     /// <param name="clientId">客户端id</param>
     /// <param name="clientMetaData">客户端相关信息，比如ip</param>
     /// <returns>websocket 地址：ws://xxxx/ws?token=xxx</returns>
-    public string PrevConnectServer(Guid clientId, string clientMetaData)
+    public string PrevConnectServer(Guid clientId, ImClientInfo clientMetaData)
     {
         var server = SelectServer(clientId);
-        string clientKey = clientId.ToString().Replace("-", "");
-        int timeout = 60;
-        var token = Cache.Default.Get<string>($"UserToken_{clientKey}");
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            token = $"{Guid.NewGuid()}{Guid.NewGuid()}".Replace("-", "");
-            Cache.Default.Set($"UserToken_{clientKey}", token, timeout);
-        }
-        else
-        {
-            TimeSpan timeSpan = Cache.Default.GetExpire($"UserToken_{clientKey}");
-            timeout = timeSpan.Seconds;
-        }
-        while (!_redis.Exists($"{_redisPrefix}Token{token}"))
-        {
-            _redis.Set($"{_redisPrefix}Token{token}", JsonConvert.SerializeObject((clientId, clientMetaData)), timeout);
-        }
+        var token = clientMetaData.token;
+        _redis.Set($"{_redisPrefix}Token{token}", clientMetaData, 10);
         return $"wss://{server}{_pathMatch}?token={token}";
     }
 

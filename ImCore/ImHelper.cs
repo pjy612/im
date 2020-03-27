@@ -24,7 +24,7 @@ public static class ImHelper
     /// <param name="clientId">客户端id</param>
     /// <param name="clientMetaData">客户端相关信息，比如ip</param>
     /// <returns>websocket 地址：ws://xxxx/ws?token=xxx</returns>
-    public static string PrevConnectServer(Guid clientId, string clientMetaData) => Instance.PrevConnectServer(clientId, clientMetaData);
+    public static string PrevConnectServer(Guid clientId, ImClientInfo clientMetaData) => Instance.PrevConnectServer(clientId, clientMetaData);
 
     /// <summary>
     /// 向指定的多个客户端id发送消息

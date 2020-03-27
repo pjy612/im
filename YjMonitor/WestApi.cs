@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Text;
+using System.Threading.Tasks;
+using NewLife.Log;
 using Newtonsoft.Json;
 using RestSharp;
 
@@ -14,12 +17,22 @@ namespace YjMonitorNet
         public static List<TvGiftDTO> GetTv()
         {
             RestRequest request = new RestRequest("bilibili/raffle/v1/getList");
-            var execute = _client.Execute<HttpRspDTO<List<TvGiftDTO>>>(request);
             request.AddQueryParameter(nameof(authName), authName);
             request.AddQueryParameter(nameof(accessKey), accessKey);
-            if (execute.Data.Code == 0)
+            try
             {
-                return execute.Data.Data;
+                var execute = _client.Execute<HttpRspDTO<List<TvGiftDTO>>>(request);
+                if (execute.StatusCode == HttpStatusCode.OK)
+                {
+                    if (execute.Data.Code == 0)
+                    {
+                        return execute.Data.Data;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                XTrace.WriteException(e);
             }
             return new List<TvGiftDTO>();
         }
@@ -28,10 +41,20 @@ namespace YjMonitorNet
             RestRequest request = new RestRequest("bilibili/guard/v1/getList");
             request.AddQueryParameter(nameof(authName), authName);
             request.AddQueryParameter(nameof(accessKey), accessKey);
-            var execute = _client.Execute<HttpRspDTO<List<GuardGiftDTO>>>(request);
-            if (execute.Data.Code == 0)
+            try
             {
-                return execute.Data.Data;
+                var execute = _client.Execute<HttpRspDTO<List<GuardGiftDTO>>>(request);
+                if (execute.StatusCode == HttpStatusCode.OK)
+                {
+                    if (execute.Data.Code == 0)
+                    {
+                        return execute.Data.Data;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                XTrace.WriteException(e);
             }
             return new List<GuardGiftDTO>();
         }
@@ -40,10 +63,20 @@ namespace YjMonitorNet
             RestRequest request = new RestRequest("bilibili/beatStorm/v1/getList");
             request.AddQueryParameter(nameof(authName), authName);
             request.AddQueryParameter(nameof(accessKey), accessKey);
-            var execute = _client.Execute<HttpRspDTO<List<StormGiftDTO>>>(request);
-            if (execute.Data.Code == 0)
+            try
             {
-                return execute.Data.Data;
+                var execute = _client.Execute<HttpRspDTO<List<StormGiftDTO>>>(request);
+                if (execute.StatusCode == HttpStatusCode.OK)
+                {
+                    if (execute.Data.Code == 0)
+                    {
+                        return execute.Data.Data;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                XTrace.WriteException(e);
             }
             return new List<StormGiftDTO>();
         }

@@ -18,9 +18,11 @@ namespace web.Controllers
     public class RoomController : Controller
     {
         private static readonly List<long> staticRoomList = new List<long>();
+        private EntityCache<RoomInitList> CacheAllRoomIds;
 
         public RoomController()
         {
+            CacheAllRoomIds = new EntityCache<RoomInitList> {FillListMethod = () => RoomInitList.FindAll(null, selects: RoomInitList._.RoomID), Expire = 60};
         }
 
         [HttpGet("v1/Room/room_init")]
@@ -31,23 +33,55 @@ namespace web.Controllers
                 RoomInitList roomInitList = RoomInitList.FindByKey(id);
                 if (roomInitList == null)
                 {
-                    RoomQueue.QueueLazy.Value.QueueRoomSet.Add(id);
+                    RoomQueue.Instance.QueueRoomSet.Add(id);
                     return new {code = -1};
                 }
-                return JsonConvert.DeserializeObject<RoomInit>(roomInitList.Message);
+                else
+                {
+                    var entity = RoomSort.FindByKey(id);
+                    if (entity == null || entity.LastUpdateTime < DateTime.Today.AddDays(-1))
+                    {
+                        RoomQueue.Instance.QueueRoomSet.Add(id);
+                    }
+                }
+                return new { code = -1 ,data = roomInitList };
             }
             return new {code = -1};
         }
 
-        [HttpGet("v1/Room/sort/force")]
-        public object room_sort_ex(long id)
+        [HttpPost("v1/Room/room_init_list")]
+        public object room_init_list([FromBody] List<long> ids)
         {
-            var entity = RoomSort.FindByKey(id);
-            if (entity == null)
+            if (ids != null && ids.Any())
             {
-                return RoomQueue.QueueLazy.Value.RoomSortForce(id);
+                ids.RemoveAll(r => RoomQueue.Instance.QueueRoomSet.Contains(r));
+                ids.RemoveAll(r => RoomQueue.Instance.ProcessCollection.Contains(r));
+                IList<RoomSort> all = RoomSort.FindAll(null, selects: RoomSort._.RoomID);
+                ids.RemoveAll(r => all.Any(c => c.RoomID == r));
+                if (ids.Any())
+                {
+                    ids.ForEach(r => RoomQueue.Instance.QueueRoomSet.Add(r));
+                }
+                return new {code = 0};
             }
-            return entity;
+            return new {code = -1};
+        }
+
+        [HttpGet("v1/Room/room/all")]
+        public object room_all()
+        {
+            IList<RoomInitList> roomInitLists = CacheAllRoomIds.Entities;
+            return new
+            {
+                code = 0,
+                data = roomInitLists.Select(r => r.RoomID).Distinct().ToList()
+            };
+        }
+
+        [HttpGet("v1/Room/sort/force")]
+        public async Task<RoomSort> room_sort_ex(long id)
+        {
+            return await RoomQueue.Instance.RoomSortForce(id, true);
 //            RoomInitList room = RoomInitList.FindByKey(id);
 //            if (room == null)
 //            {
@@ -100,8 +134,6 @@ namespace web.Controllers
 //            return JsonConvert.DeserializeObject<RoomInit>(room?.Message);
         }
 
-        const string roomSortCacheKey = nameof(room_sort);
-
         [HttpGet("v1/Room/sort")]
         public object room_sort(int page = 0, int size = 5000, bool full = false)
         {
@@ -122,18 +154,19 @@ namespace web.Controllers
             return data;
         }
 
-        [HttpGet("v1/Room/all")]
-        public object room_sort()
+        [HttpGet("v1/Room/sort/all")]
+        public object room_sort_all()
         {
-            dynamic data = new System.Dynamic.ExpandoObject();
             List<RoomUserDataDto> sorted = room_sort_nocahce();
-            data.code = 0;
-            data.data = sorted.Select(r => r.room_id).ToArray();
-            return data;
+            return new
+            {
+                code = 0,
+                data = sorted.Select(r => r.room_id).ToArray()
+            };
         }
 
-        [HttpGet("v1/Room/list")]
-        public object room_sort(int page = 0, int size = 5000)
+        [HttpGet("v1/Room/sort/list")]
+        public object room_sort_list(int page = 0, int size = 5000)
         {
             if (size <= 1000) size = 1000;
             List<RoomUserDataDto> roomUserDataDtos = room_sort_nocahce();
@@ -166,8 +199,8 @@ namespace web.Controllers
                 guard_num  = r.GuardNum,
             }).ToList();
             return userDatas
-                .Where(r => r.fans_num > 5 || r.follow_num > 300 || r.guard_num > 0)
-                .OrderByDescending(r => r.guard_num).ThenByDescending(r => r.fans_num).ThenByDescending(r => r.fans_num).ToList();
+                .Where(r => (r.fans_num > 3 && r.follow_num > 300) || r.guard_num > 0)
+                .OrderByDescending(r => r.guard_num).ThenByDescending(r => r.fans_num).ThenByDescending(r => r.follow_num).ToList();
         }
     }
 }

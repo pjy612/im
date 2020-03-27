@@ -29,6 +29,7 @@ namespace BiliEntity
         {
             // 用于引发基类的静态构造函数，所有层次的泛型实体类都应该有一个
             TEntity entity = new TEntity();
+            
         }
 
         /// <summary>验证数据，通过抛出异常的方式提示验证失败。</summary>
@@ -88,8 +89,6 @@ namespace BiliEntity
         #endregion
 
         #region 扩展属性
-
-        public RoomInit Data => Extends.Get(nameof(Data),k=> JsonConvert.DeserializeObject<RoomInit>(Message));
 
         #endregion
 

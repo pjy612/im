@@ -19,6 +19,7 @@ namespace web.Controllers
         public string Ip => this.Request.Headers["X-Real-IP"].FirstOrDefault() ?? this.Request.HttpContext.Connection.RemoteIpAddress.ToString();
         public string referer => this.Request.Headers["Referer"].FirstOrDefault();
         public string UA => this.Request.Headers["User-Agent"].FirstOrDefault();
+
         /// <summary>
         /// 获取websocket分区
         /// </summary>
@@ -26,15 +27,35 @@ namespace web.Controllers
         /// <param name="uid"></param>
         /// <returns></returns>
         [HttpPost("pre-connect")]
-        public object preConnect([FromForm] Guid? websocketId, [FromForm] int? uid)
+        public object preConnect([FromForm] Guid? websocketId, [FromForm] int? uid, [FromForm] string version)
         {
+            Version lastVersion = new Version("2.4.4.0");
+            Version.TryParse(version, out Version vers);
             if (UA.ToLower().Contains("firefox"))
             {
                 return new {code = -1, msg = "请勿使用火狐浏览器"};
             }
             if (!uid.HasValue)
             {
-                return new { code = -1, msg = "请更新脚本至v2.4.3.17或以上" };
+                return new {code = -1, msg = $"请更新脚本至v{lastVersion}或以上"};
+            }
+            if (vers == null || vers < lastVersion)
+            {
+                return new {code = -1, msg = $"请更新脚本至v{lastVersion}或以上"};
+            }
+            string refUrl = referer.Split("?", StringSplitOptions.RemoveEmptyEntries)[0];
+            int[] rooms = new[] {21438956};
+            bool roomCheck = false;
+            foreach (var room in rooms)
+            {
+                if (refUrl.Contains($"live.bilibili.com/{room}"))
+                {
+                    roomCheck = true;
+                }
+            }
+            if (!roomCheck)
+            {
+                return new {code = -1, msg = $"bilipush仅支持直播间{rooms.Join(",")}"};
             }
             if (websocketId == null)
             {
@@ -42,14 +63,14 @@ namespace web.Controllers
                 if (guid.IsNullOrWhiteSpace())
                 {
                     websocketId = Guid.NewGuid();
-                    Cache.Default.Set($"UserGuid_{uid.Value}", websocketId.Value.ToString(),TimeSpan.FromHours(1));
+                    Cache.Default.Set($"UserGuid_{uid.Value}", websocketId.Value.ToString(), TimeSpan.FromHours(1));
                 }
                 else
                 {
                     websocketId = new Guid(guid);
                 }
             }
-            var wsserver = ImHelper.PrevConnectServer(websocketId.Value, JsonConvert.SerializeObject(new {uid, Ip, referer}));
+            var wsserver = ImHelper.PrevConnectServer(websocketId.Value, new ImClientInfo {uid = uid.Value, Ip = Ip, referer = referer, version = vers});
             return new
             {
                 code        = 0,
@@ -74,6 +95,36 @@ namespace web.Controllers
         public object PostRaffle([FromForm] string msg)
         {
             ImHelper.SendMessageOnline(msg);
+            return new
+            {
+                code = 0
+            };
+        }
+
+        [HttpPost("post_msg")]
+        public object PostMsg([FromForm] string msg)
+        {
+            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "msg", data = msg}));
+            return new
+            {
+                code = 0
+            };
+        }
+
+        [HttpPost("post_reload")]
+        public object PostReload()
+        {
+            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "reload"}));
+            return new
+            {
+                code = 0
+            };
+        }
+
+        [HttpPost("post_common_reload")]
+        public object PostCommonReload(bool force = false)
+        {
+            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "common", data = force ? ImClient.forceReloadjs : ImClient.reloadjs}));
             return new
             {
                 code = 0

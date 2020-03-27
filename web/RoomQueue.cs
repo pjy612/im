@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Threading;
 using System.Threading.Tasks;
 using BiliEntity;
 using NewLife.Http;
@@ -18,48 +19,59 @@ namespace web
 {
     public class RoomQueue
     {
-        private static TinyHttpClient httpClient = new TinyHttpClient();
-
-        readonly BlockingCollection<long> ProcessCollection = new BlockingCollection<long>();
-        public HashSet<long> QueueRoomSet = new HashSet<long>();
+        public readonly BlockingCollection<long> ProcessCollection = new BlockingCollection<long>();
+        public readonly HashSet<long> QueueRoomSet = new HashSet<long>();
+        public readonly List<long> RoomNeedLoad = new List<long>();
+        private static RoomQueue _instance;
+        public static RoomQueue Instance => _instance ?? (_instance = new RoomQueue());
 
         public RoomQueue()
         {
             var timerX = new TimerX(state =>
             {
                 long[] ids = QueueRoomSet.ToArray();
-                foreach (var id in ids)
+                ids.AsParallel().ForAll(id =>
                 {
                     QueueRoomSet.Remove(id);
-                    ProcessCollection.Add(id);
-                }
+                    if (!ProcessCollection.Contains(id))
+                    {
+                        ProcessCollection.Add(id);
+                    }
+                });
             }, null, 1000, 1000);
-            Task.Run(() =>
+            Task.Run(async () =>
             {
                 foreach (var item in ProcessCollection.GetConsumingEnumerable())
                 {
-                    RoomSortForce(item);
+                    await RoomSortForce(item);
                 }
             });
+            Task.Run(() =>
+            {
+                do
+                {
+                    if (RoomNeedLoad.Count > 0 || QueueRoomSet.Count > 0 || ProcessCollection.Count > 0)
+                    {
+                        Console.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} RoomNeedLoad:{RoomQueue.Instance.RoomNeedLoad.Count},RoomQueue:{RoomQueue.Instance.QueueRoomSet.Count},Process:{RoomQueue.Instance.ProcessCollection.Count}");
+                    }
+                    Thread.Sleep(1000);
+                } while (true);
+            });
+            Console.WriteLine($"RoomQueue Init");
         }
 
-        public static Lazy<RoomQueue> QueueLazy = new Lazy<RoomQueue>(() =>
-        {
-            RoomQueue q = new RoomQueue();
-            return q;
-        });
-
-        public RoomSort RoomSortForce(long id)
+        public async Task<RoomSort> RoomSortForce(long id, bool force = false)
         {
             RoomInitList room = RoomInitList.FindByKey(id);
-            if (room == null || room?.LastUpdateTime < DateTime.Now.AddDays(-3))
+            if (room == null)
             {
                 RoomInit init = RoomQueue.GetRoomInitByRoomId(id);
                 if (init?.Code == 0)
                 {
-                    room                = new RoomInitList() {RoomID = id};
-                    room.Uid            = init.Data.Uid;
-                    room.Message        = JsonConvert.SerializeObject(init);
+                    room     = new RoomInitList() {RoomID = id};
+                    room.Uid = init.Data.Uid;
+                    //room.Message        = JsonConvert.SerializeObject(init);
+                    room.Message        = "";
                     room.LastUpdateTime = DateTime.Now;
                     room.SaveAsync();
                     goto beginNext;
@@ -67,48 +79,50 @@ namespace web
                 return null;
             }
             beginNext:
+            RoomSort entity = RoomSort.FindByKey(id) ?? new RoomSort() {RoomID = id};
             FanGifts fan = FanGifts.FindByKey(room.RoomID);
             GuardTop guardTop = GuardTop.FindByKey(room.Uid);
             FollowNum followNum = FollowNum.FindByKey(room.Uid);
-            if (fan == null || fan?.LastUpdateTime < DateTime.Now.AddDays(-3))
+            if (fan == null || fan?.LastUpdateTime < DateTime.Today.AddDays(1) || force)
             {
-                RoomRsp<GiftTopDto> fanGiftsByRoomId = RoomQueue.GetFanGiftsByRoomId(room.RoomID);
+                RoomRsp<GiftTopDto> fanGiftsByRoomId = await RoomQueue.GetFanGiftsByRoomId(room.RoomID);
                 if (fanGiftsByRoomId?.Code == 0)
                 {
                     fan                = new FanGifts() {RoomID = room.RoomID};
                     fan.Num            = fanGiftsByRoomId.Data.List.Count;
-                    fan.Message        = JsonConvert.SerializeObject(fanGiftsByRoomId);
+                    fan.Message        = "";
                     fan.LastUpdateTime = DateTime.Now;
                     fan.SaveAsync();
                 }
             }
-            if (guardTop == null || guardTop?.LastUpdateTime < DateTime.Now.AddDays(-3))
+            if (guardTop == null || guardTop?.LastUpdateTime < DateTime.Today.AddDays(1) || force)
             {
-                RoomRsp<GuardTopDto> dto = RoomQueue.GetGuardTopByUid(room.Uid);
+                RoomRsp<GuardTopDto> dto = await RoomQueue.GetGuardTopByUid(room.Uid);
                 if (dto?.Code == 0)
                 {
-                    guardTop                = new GuardTop() {Uid = room.Uid};
-                    guardTop.Num            = dto.Data?.Info?.Num ?? 0;
-                    guardTop.Data           = JsonConvert.SerializeObject(dto);
+                    guardTop     = new GuardTop() {Uid = room.Uid};
+                    guardTop.Num = dto.Data?.Info?.Num ?? 0;
+                    //guardTop.Data           = JsonConvert.SerializeObject(dto);
+                    guardTop.Data           = "";
                     guardTop.LastUpdateTime = DateTime.Now;
                     guardTop.SaveAsync();
                 }
             }
-            if (followNum == null || followNum?.LastUpdateTime < DateTime.Now.AddDays(-3))
+            if (followNum == null || followNum?.LastUpdateTime < DateTime.Today.AddDays(1) || force)
             {
-                RoomRsp<FollowNumDto> followNumByUid = RoomQueue.GetFollowNumByUid(room.Uid);
+                RoomRsp<FollowNumDto> followNumByUid = await RoomQueue.GetFollowNumByUid(room.Uid);
                 if (followNumByUid?.Code == 0)
                 {
-                    followNum                = new FollowNum() {Uid = id};
-                    followNum.Num            = followNumByUid.Data.Fc;
-                    followNum.Data           = JsonConvert.SerializeObject(followNumByUid);
+                    followNum     = new FollowNum() {Uid = id};
+                    followNum.Num = followNumByUid.Data.Fc;
+                    //followNum.Data           = JsonConvert.SerializeObject(followNumByUid);
+                    followNum.Data           = "";
                     followNum.LastUpdateTime = DateTime.Now;
                     followNum.SaveAsync();
                 }
             }
-            if (followNum != null && guardTop != null && fan != null && room != null)
+            if (followNum != null && guardTop != null && fan != null)
             {
-                var entity = RoomSort.FindByKey(id) ?? new RoomSort() {RoomID = id};
                 entity.Uid            = room.Uid;
                 entity.FansNum        = fan?.Num       ?? 0;
                 entity.FollowNum      = followNum?.Num ?? 0;
@@ -137,8 +151,6 @@ namespace web
                     {
                         Console.WriteLine($"GetRoomInitByRoomId:{roomid}:{execute.Content}");
                     }
-                    RoomInitList.FindByKey(roomid)?.Delete();
-                    RoomSort.FindByKey(roomid)?.Delete();
                 }
             }
             catch (Exception e)
@@ -148,13 +160,13 @@ namespace web
             return null;
         }
 
-        public static RoomRsp<GiftTopDto> GetFanGiftsByRoomId(long roomid)
+        public static async Task<RoomRsp<GiftTopDto>> GetFanGiftsByRoomId(long roomid)
         {
             try
             {
                 RestClient client = new RestClient();
                 RestRequest request = new RestRequest($"https://api.live.bilibili.com/AppRoom/getGiftTop?room_id={roomid}", Method.GET);
-                IRestResponse<RoomRsp<GiftTopDto>> execute = client.Execute<RoomRsp<GiftTopDto>>(request);
+                IRestResponse<RoomRsp<GiftTopDto>> execute = await client.ExecuteTaskAsync<RoomRsp<GiftTopDto>>(request);
                 if (execute.StatusCode == HttpStatusCode.OK)
                 {
                     if (execute.Data.Code == 0)
@@ -175,13 +187,13 @@ namespace web
             return null;
         }
 
-        public static RoomRsp<GuardTopDto> GetGuardTopByUid(long uid)
+        public static async Task<RoomRsp<GuardTopDto>> GetGuardTopByUid(long uid)
         {
             try
             {
                 RestClient client = new RestClient();
                 RestRequest request = new RestRequest($"https://api.live.bilibili.com/guard/topList?ruid={uid}&page=1", Method.GET);
-                IRestResponse<RoomRsp<GuardTopDto>> execute = client.Execute<RoomRsp<GuardTopDto>>(request);
+                IRestResponse<RoomRsp<GuardTopDto>> execute = await client.ExecuteTaskAsync<RoomRsp<GuardTopDto>>(request);
                 if (execute.StatusCode == HttpStatusCode.OK)
                 {
                     if (execute.Data != null && execute.Data.Code == 0)
@@ -202,13 +214,13 @@ namespace web
             return null;
         }
 
-        public static RoomRsp<FollowNumDto> GetFollowNumByUid(long uid)
+        public static async Task<RoomRsp<FollowNumDto>> GetFollowNumByUid(long uid)
         {
             try
             {
                 RestClient client = new RestClient();
                 RestRequest request = new RestRequest($"https://api.live.bilibili.com/relation/v1/Feed/GetUserFc?follow={uid}", Method.GET);
-                IRestResponse<RoomRsp<FollowNumDto>> execute = client.Execute<RoomRsp<FollowNumDto>>(request);
+                IRestResponse<RoomRsp<FollowNumDto>> execute = await client.ExecuteTaskAsync<RoomRsp<FollowNumDto>>(request);
                 if (execute.StatusCode == HttpStatusCode.OK)
                 {
                     if (execute.Data != null && execute.Data.Code == 0)

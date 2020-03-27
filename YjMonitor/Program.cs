@@ -24,6 +24,7 @@ using NewLife.Serialization;
 using NewLife.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using XCode;
 using YjMonitorNet;
 
 namespace YjMonitor
@@ -66,74 +67,89 @@ namespace YjMonitor
                 return true;
             }
         }
-        
 
         private static void PollWestApi()
         {
+            XTrace.WriteLine("POST WestApi Start");
             List<StormGiftDTO> stormGiftDtos = WestApi.GetStorm();
             List<TvGiftDTO> tvGiftDtos = WestApi.GetTv();
             List<GuardGiftDTO> guardGiftDtos = WestApi.GetGuard();
             RaffleList.Meta.ProcessWithSplit(RaffleList.Meta.ConnName, $"{RaffleList.Meta.TableName}_west", () =>
             {
+                List<RaffleList> list = new List<RaffleList>();
                 if (stormGiftDtos.Any())
                 {
-                    stormGiftDtos.ForEach(storm =>
+                    List<long> ids = stormGiftDtos.Select(r => r.Id).ToList();
+                    
+                    IList<RaffleList> entitys = RaffleList.FindAllByRaffleIDsAndType(ids, "STORM");
+
+                    stormGiftDtos = stormGiftDtos.Where(r => entitys.All(c => c.RaffleID != r.Id)).ToList();
+                    if (stormGiftDtos.Any())
                     {
-                        var raffle = RaffleList.FindByRaffleIDAndType(storm.Id, "STORM");
-                        if (raffle != null)
+                        var tmp = stormGiftDtos.AsParallel().Select(item =>
                         {
-                            return;
-                        }
-                        raffle              = new RaffleList();
-                        raffle.RaffleID     = storm.Id;
-                        raffle.RaffleIDSort = storm.Id / 1000000;
-                        raffle.RoomID       = storm.RoomId;
-                        raffle.RaffleType   = "STORM";
-                        raffle.EndTime      = ToLocal(storm.Time + 60);
-                        raffle.Data         = JsonConvert.SerializeObject(storm);
-                        raffle.CreateAt     = ToLocal(storm.Time);
-                        raffle.Insert();
-                    });
+                            var raffle = new RaffleList();
+                            raffle.RaffleID     = item.Id;
+                            raffle.RaffleIDSort = item.Id / 1000000;
+                            raffle.RoomID       = item.RoomId;
+                            raffle.RaffleType   = "STORM";
+                            raffle.EndTime      = ToLocal(item.Time + 60);
+                            raffle.Data         = JsonConvert.SerializeObject(item);
+                            raffle.CreateAt     = ToLocal(item.Time);
+                            return raffle;
+                        }).ToList();
+                        list.AddRange(tmp);
+                    }
                 }
                 if (guardGiftDtos.Any())
                 {
-                    guardGiftDtos.ForEach(guard =>
+                    List<long> ids = guardGiftDtos.Select(r => r.Id).ToList();
+
+                    IList<RaffleList> entitys = RaffleList.FindAllByRaffleIDsAndType(ids, "GUARD");
+                    guardGiftDtos = guardGiftDtos.Where(r => entitys.All(c => c.RaffleID != r.Id)).ToList();
+                    if (guardGiftDtos.Any())
                     {
-                        var raffle = RaffleList.FindByRaffleIDAndType(guard.Id, "GUARD");
-                        if (raffle != null)
+                        var tmp = guardGiftDtos.AsParallel().Select(item =>
                         {
-                            return;
-                        }
-                        raffle            = new RaffleList();
-                        raffle.RaffleID   = raffle.RaffleIDSort = guard.Id;
-                        raffle.RoomID     = guard.RoomId;
-                        raffle.RaffleType = "GUARD";
-                        raffle.EndTime    = ToLocal(guard.EndTime);
-                        raffle.GuardType  = $"{guard.Type}";
-                        raffle.Data       = JsonConvert.SerializeObject(guard);
-                        raffle.CreateAt   = ToLocal(guard.Time);
-                        raffle.Insert();
-                    });
+                            var raffle = new RaffleList();
+                            raffle.RaffleID   = raffle.RaffleIDSort = item.Id;
+                            raffle.RoomID     = item.RoomId;
+                            raffle.RaffleType = "GUARD";
+                            raffle.EndTime    = ToLocal(item.EndTime);
+                            raffle.GuardType  = $"{item.Type}";
+                            raffle.Data       = JsonConvert.SerializeObject(item);
+                            raffle.CreateAt   = ToLocal(item.Time);
+                            return raffle;
+                        }).ToList();
+                        list.AddRange(tmp);
+                    }
                 }
                 if (tvGiftDtos.Any())
                 {
-                    tvGiftDtos.ForEach(tv =>
+                    List<long> ids = tvGiftDtos.Select(r => r.Id).ToList();
+
+                    IList<RaffleList> entitys = RaffleList.FindAllByRaffleIDsAndType(ids, "TV");
+                    tvGiftDtos = tvGiftDtos.Where(r => entitys.All(c => c.RaffleID != r.Id)).ToList();
+                    if (tvGiftDtos.Any())
                     {
-                        var raffle = RaffleList.FindByRaffleIDAndType(tv.Id, "TV");
-                        if (raffle != null)
+                        var tmp = tvGiftDtos.AsParallel().Select(item =>
                         {
-                            return;
-                        }
-                        raffle            = new RaffleList();
-                        raffle.RaffleID   = raffle.RaffleIDSort = tv.Id;
-                        raffle.RoomID     = tv.RoomId;
-                        raffle.RaffleType = "TV";
-                        raffle.EndTime    = ToLocal(tv.EndTime);
-                        raffle.TvType     = tv.GiftTypeForJoin;
-                        raffle.Data       = JsonConvert.SerializeObject(tv);
-                        raffle.CreateAt   = ToLocal(tv.Time);
-                        raffle.Insert();
-                    });
+                            var raffle = new RaffleList();
+                            raffle.RaffleID   = raffle.RaffleIDSort = item.Id;
+                            raffle.RoomID     = item.RoomId;
+                            raffle.RaffleType = "TV";
+                            raffle.EndTime    = ToLocal(item.EndTime);
+                            raffle.TvType     = item.GiftTypeForJoin;
+                            raffle.Data       = JsonConvert.SerializeObject(item);
+                            raffle.CreateAt   = ToLocal(item.Time);
+                            return raffle;
+                        }).ToList();
+                        list.AddRange(tmp);
+                    }
+                }
+                if (list.Any())
+                {
+                    list.Insert();
                 }
                 return true;
             });
@@ -144,6 +160,50 @@ namespace YjMonitor
             return new DateTime(1970, 1, 1).ToLocalTime().AddSeconds(time);
         }
 
+        static RaffleList Process(string item)
+        {
+            try
+            {
+                JToken data = JObject.Parse(item);
+                long room_id = data["data"]["room_id"].Value<int>();
+                string raffle_type = data["data"]["raffle_type"].Value<string>();
+                long raffle_id = data["data"]["raffle_id"].Value<long>();
+                long end_time = data["data"]["end_time"].Value<long>();
+                RaffleList raffle = RaffleList.FindByRaffleIDAndType(raffle_id, raffle_type);
+                if (raffle != null)
+                {
+                    return null;
+                }
+                raffle            = new RaffleList();
+                raffle.RaffleID   = raffle.RaffleIDSort = raffle_id;
+                raffle.RoomID     = room_id;
+                raffle.RaffleType = raffle_type;
+                raffle.EndTime    = ToLocal(end_time);
+                switch (raffle_type)
+                {
+                    case "TV":
+                        raffle.TvType = data["data"]["other_raffle_data"]["type"].Value<string>();
+                        break;
+                    case "GUARD":
+                        raffle.GuardType = data["data"]["other_raffle_data"]["privilege_type"].Value<string>();
+                        break;
+                    case "PK":
+                        break;
+                    case "STORM":
+                        raffle.RaffleIDSort = raffle_id / 1000000;
+                        break;
+                }
+                raffle.Data     = item;
+                raffle.CreateAt = DateTime.Now;
+                return raffle;
+            }
+            catch
+            {
+                Console.WriteLine($"ErrorData：{item}");
+            }
+            return null;
+        }
+
         static void Main(string[] args)
         {
             XTrace.UseConsole();
@@ -152,51 +212,14 @@ namespace YjMonitor
                 Redis   = new CSRedis.CSRedisClient(JsonConfig<YjMonitorConfig>.Current.Redis),
                 Servers = JsonConfig<YjMonitorConfig>.Current.ImServers
             });
-            BlockingCollection<string> SaveQueue = new BlockingCollection<string>();
+            BlockingCollection<RaffleList> SaveQueue = new BlockingCollection<RaffleList>();
             ConcurrentQueue<(int, string)> Queue = new ConcurrentQueue<(int, string)>();
             Task.Run(() =>
             {
                 foreach (var item in SaveQueue.GetConsumingEnumerable())
                 {
-                    try
-                    {
-                        JToken data = JObject.Parse(item);
-                        long room_id = data["data"]["room_id"].Value<int>();
-                        string raffle_type = data["data"]["raffle_type"].Value<string>();
-                        long raffle_id = data["data"]["raffle_id"].Value<long>();
-                        long end_time = data["data"]["end_time"].Value<long>();
-                        RaffleList raffle = RaffleList.FindByRaffleIDAndType(raffle_id, raffle_type);
-                        if (raffle != null)
-                        {
-                            return;
-                        }
-                        raffle            = new RaffleList();
-                        raffle.RaffleID   = raffle.RaffleIDSort = raffle_id;
-                        raffle.RoomID     = room_id;
-                        raffle.RaffleType = raffle_type;
-                        raffle.EndTime    = ToLocal(end_time);
-                        switch (raffle_type)
-                        {
-                            case "TV":
-                                raffle.TvType = data["data"]["other_raffle_data"]["type"].Value<string>();
-                                break;
-                            case "GUARD":
-                                raffle.GuardType = data["data"]["other_raffle_data"]["privilege_type"].Value<string>();
-                                break;
-                            case "PK":
-                                break;
-                            case "STORM":
-                                raffle.RaffleIDSort = raffle_id / 1000000;
-                                break;
-                        }
-                        raffle.Data     = item;
-                        raffle.CreateAt = DateTime.Now;
-                        raffle.Insert();
-                    }
-                    catch
-                    {
-                        Console.WriteLine($"ErrorData：{item}");
-                    }
+                    item.Insert();
+                    Thread.Sleep(50);
                 }
             });
             Task.Run(() =>
@@ -209,22 +232,35 @@ namespace YjMonitor
                     {
                         set.Add(tuple);
                     }
-                    set.ToList().ForEach((item) =>
+                    if (set.Any())
                     {
-                        ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new
+                        set.ToList().ForEach((item) =>
                         {
-                            code = 0,
-                            type = "raffle",
-                            data = new
+                            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new
                             {
-                                room_id     = item.Item1,
-                                raffle_type = item.Item2
-                            }
-                        }));
-                    });
+                                code = 0,
+                                type = "raffle",
+                                data = new
+                                {
+                                    room_id     = item.Item1,
+                                    raffle_type = item.Item2
+                                }
+                            }));
+                        });
+                    }
                 }
             });
-            new TimerX(state => { PollWestApi(); }, null, 10_000, 10_000){Async = true};
+            new TimerX(state =>
+            {
+                try
+                {
+                    PollWestApi();
+                }
+                catch (Exception e)
+                {
+                    XTrace.WriteException(e);
+                }
+            }, null, 1000, 10_000);
             YjClient yjClient = new YjClient(JsonConfig<YjMonitorConfig>.Current.Address, JsonConfig<YjMonitorConfig>.Current.Key);
             yjClient.OnReceived = (s, e) =>
             {
@@ -235,7 +271,8 @@ namespace YjMonitor
                 try
                 {
                     JObject data = JObject.Parse(unescape);
-                    SaveQueue.Add(unescape);
+                    RaffleList raffleList = Process(unescape);
+                    SaveQueue.Add(raffleList);
                     if (new Random(Guid.NewGuid().GetHashCode()).NextDouble() < JsonConfig<YjMonitorConfig>.Current.Rand)
                     {
                         //ImHelper.SendMessageOnline(msg);
