@@ -12,6 +12,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using BiliEntity;
+using CSRedis;
 using NewLife;
 using NewLife.Data;
 using NewLife.Json;
@@ -80,7 +81,7 @@ namespace YjMonitor
                 if (stormGiftDtos.Any())
                 {
                     List<long> ids = stormGiftDtos.Select(r => r.Id).ToList();
-                    
+
                     IList<RaffleList> entitys = RaffleList.FindAllByRaffleIDsAndType(ids, "STORM");
 
                     stormGiftDtos = stormGiftDtos.Where(r => entitys.All(c => c.RaffleID != r.Id)).ToList();
@@ -174,11 +175,19 @@ namespace YjMonitor
                 {
                     return null;
                 }
+
                 raffle            = new RaffleList();
                 raffle.RaffleID   = raffle.RaffleIDSort = raffle_id;
                 raffle.RoomID     = room_id;
                 raffle.RaffleType = raffle_type;
                 raffle.EndTime    = ToLocal(end_time);
+                string key = $"RR:{room_id}";
+                TimeSpan exp = raffle.EndTime - DateTime.Now;
+                var exps = RedisHelper.Ttl(key);
+                if (exps < exp.TotalSeconds)
+                {
+                    RedisHelper.Set(key, 1, exp.TotalSeconds.ToInt());
+                }
                 switch (raffle_type)
                 {
                     case "TV":
@@ -207,9 +216,11 @@ namespace YjMonitor
         static void Main(string[] args)
         {
             XTrace.UseConsole();
+            CSRedisClient csRedisClient = new CSRedis.CSRedisClient(JsonConfig<YjMonitorConfig>.Current.Redis);
+            RedisHelper.Initialization(csRedisClient);
             ImHelper.Initialization(new ImClientOptions
             {
-                Redis   = new CSRedis.CSRedisClient(JsonConfig<YjMonitorConfig>.Current.Redis),
+                Redis   = csRedisClient,
                 Servers = JsonConfig<YjMonitorConfig>.Current.ImServers
             });
             BlockingCollection<RaffleList> SaveQueue = new BlockingCollection<RaffleList>();
@@ -354,7 +365,7 @@ namespace YjMonitor
                         //XTrace.WriteLine("自检");
                         ISocketClient socketClient = state as ISocketClient;
                         if (!socketClient.Active) ReConnect();
-                    }, client, 1_000, 1_000) {CanExecute = () => !client.Active, Async = true};
+                    }, client, 1_000, 1_000) {CanExecute = () => !client.Active};
                 }
             }
 
@@ -385,7 +396,7 @@ namespace YjMonitor
                             XTrace.WriteException(exception);
                             ReConnect();
                         }
-                    }, null, 0, 30_000) {CanExecute = () => client.Active, Async = true};
+                    }, null, 0, 30_000) {CanExecute = () => client.Active};
                     return;
                 }
                 else if (data_type == "error")

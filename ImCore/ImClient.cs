@@ -19,6 +19,7 @@ public class ImClientInfo
     }
 
     public long uid { get; set; }
+    public long realUid { get; set; }
     public string uname { get; set; }
     public string Ip { get; set; }
     public string referer { get; set; }
@@ -105,11 +106,20 @@ public class ImClient
         try
         {
             if(typeof(heartTimeout)!='undefined'){
-                clearTimeout(heartTimeout)
+                clearTimeout(heartTimeout);
             }
             BiliPush.gsocket.send(JSON.stringify({ type: 'heart',data: '" + val + @"'}));
         }
         catch { }";
+    }
+
+    public string postUserjs()
+    {
+        return @"
+try{
+var getCookie=(name)=>{let arr;const reg=new RegExp(`(^|)${name}=([^;]*)(;|$)`);if((arr=document.cookie.match(reg))){return unescape(arr[2])}else{return null}};
+if(BilibiliLive){BiliPush.gsocket.send(JSON.stringify({type:'userInfo',data:BilibiliLive,ext:{uid:getCookie('DedeUserID'),roomid:location.href.match(/(\d+)/)[1]}}))}
+}catch(e){}";
     }
 
     public string heartjs(object val)
@@ -117,7 +127,7 @@ public class ImClient
         return @"
 try{
 if(typeof(heartTimeout)!='undefined'){
-    clearTimeout(heartTimeout)
+    clearTimeout(heartTimeout);
 }
 heartTimeout = setTimeout(()=>{
     try
@@ -138,17 +148,35 @@ catch { }";
         }
         catch { }";
 
+    public string toastjs(string message,string type,int ms)
+    {
+        return $@"
+        try
+        {{
+            window.toast('{message}','{type}',{ms});
+        }}
+        catch {{}}";
+    }
+    public string giftJs(List<long> roomIds)
+    {
+        return $@"
+        try
+        {{
+            window.toast('遗漏礼物检测ing...','info',5000);
+            let roomIds = [{roomIds.Join(",")}];
+            for(let roomId of roomIds){{
+                BiliPushUtils.Check.run(roomId);
+            }}
+        }}
+        catch {{}}";
+    }
+
     public const string reloadjs = @"
 try
 {
     var reload = false;
     if(livePlayer){
-        var info = livePlayer.getPlayerInfo();
-        if(info.playerType=='HTML5'){
-            livePlayer.reload();
-        }else{
-            reload = true;
-        }
+        livePlayer.reload();
         if($('.bilibili-live-player-video').length==0){
             reload = true;
         }
@@ -177,6 +205,24 @@ try
     location.reload();
 }
 catch { }";
+
+    public const string onlyReloadjs = @"
+try
+{    
+    location.reload();
+}
+catch { }";
+
+    public static string setVolJs(decimal vol)
+    {
+        return $@"
+try
+{{    
+    localStorage.setItem('LIVE_PLAYER_STATUS',JSON.stringify({{type:'html5',timeStamp:ts_ms()}}));
+    localStorage.setItem('videoVolume',{vol});
+}}
+catch {{ }}";
+    }
 
 
     /// <summary>
@@ -215,7 +261,7 @@ catch { }";
     {
         var server = SelectServer(clientId);
         var token = clientMetaData.token;
-        _redis.Set($"{_redisPrefix}Token{token}", clientMetaData, 10);
+        _redis.Set($"{_redisPrefix}Token{token}", clientMetaData, 30);
         return $"wss://{server}{_pathMatch}?token={token}";
     }
 

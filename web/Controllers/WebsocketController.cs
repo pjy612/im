@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using BiliEntity;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using NewLife.Caching;
+using NewLife.Json;
 using NewLife.Threading;
 using Newtonsoft.Json;
 
@@ -30,6 +31,10 @@ namespace web.Controllers
         public object preConnect([FromForm] Guid? websocketId, [FromForm] int? uid, [FromForm] string version)
         {
             Version lastVersion = new Version("2.4.4.0");
+            if(Version.TryParse(JsonConfig<ManagerOptions>.Current.lastVer,out var tmp))
+            {
+                lastVersion = tmp;
+            }
             Version.TryParse(version, out Version vers);
             if (UA.ToLower().Contains("firefox"))
             {
@@ -125,6 +130,25 @@ namespace web.Controllers
         public object PostCommonReload(bool force = false)
         {
             ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "common", data = force ? ImClient.forceReloadjs : ImClient.reloadjs}));
+            return new
+            {
+                code = 0
+            };
+        }
+        [HttpPost("post_common_only_reload")]
+        public object PostCommonOnlyReload()
+        {
+            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "common", data = ImClient.onlyReloadjs}));
+            return new
+            {
+                code = 0
+            };
+        }
+
+        [HttpPost("post_set_vol")]
+        public object PostSetVol(decimal vol = 0.1m)
+        {
+            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new { code = 0, type = "common", data = ImClient.setVolJs(vol) }));
             return new
             {
                 code = 0
