@@ -22,8 +22,7 @@ namespace web
         public readonly BlockingCollection<long> ProcessCollection = new BlockingCollection<long>();
         public readonly HashSet<long> QueueRoomSet = new HashSet<long>();
         public readonly List<long> RoomNeedLoad = new List<long>();
-        private static RoomQueue _instance;
-        public static RoomQueue Instance => _instance ?? (_instance = new RoomQueue());
+        public readonly static RoomQueue Instance = new RoomQueue();
 
         public RoomQueue()
         {
@@ -43,7 +42,9 @@ namespace web
             {
                 foreach (var item in ProcessCollection.GetConsumingEnumerable())
                 {
+                    Console.WriteLine($"开始处理 房间号:{item}");
                     await RoomSortForce(item);
+                    await Task.Delay(100);
                 }
             });
             Task.Run(() =>
@@ -60,12 +61,57 @@ namespace web
             Console.WriteLine($"RoomQueue Init");
         }
 
+
+        private List<RoomUserDataDto> SortData = new List<RoomUserDataDto>();
+        private List<long> AllRoomIds = new List<long>();
+
+        public List<long> GetAllRoomIds()
+        {
+            if (!AllRoomIds.Any())
+            {
+                AllRoomIds = RoomInitList.FindAll(null, selects: RoomInitList._.RoomID).Select(r => r.RoomID).ToList();
+            }
+            return AllRoomIds;
+        }
+        public List<RoomUserDataDto> GetSort()
+        {
+            if (!SortData.Any())
+            {
+                IList<RoomSort> findAllWithCache = RoomSort.FindAll();
+                findAllWithCache.Select(r =>
+                {
+                    var dto = new RoomUserDataDto();
+                    dto.room_id    = r.RoomID;
+                    dto.uid        = r.Uid;
+                    dto.fans_num   = r.FansNum;
+                    dto.follow_num = r.FollowNum;
+                    dto.guard_num  = r.GuardNum;
+                    return dto;
+                });
+//                findAllWithCache.AsParallel().ForAll(r =>
+//                {
+//                    var dto = SortData.FirstOrDefault(c => c.room_id == r.RoomID);
+//                    if (dto == null)
+//                    {
+//                        dto = new RoomUserDataDto();
+//                        SortData.Add(dto);
+//                    }
+//                    dto.room_id    = r.RoomID;
+//                    dto.uid        = r.Uid;
+//                    dto.fans_num   = r.FansNum;
+//                    dto.follow_num = r.FollowNum;
+//                    dto.guard_num  = r.GuardNum;
+//                });
+            }
+            return SortData;
+        }
+
         public async Task<RoomSort> RoomSortForce(long id, bool force = false)
         {
             RoomInitList room = RoomInitList.FindByKey(id);
             if (room == null)
             {
-                RoomInit init = RoomQueue.GetRoomInitByRoomId(id);
+                RoomInit init = await RoomQueue.GetRoomInitByRoomId(id);
                 if (init?.Code == 0)
                 {
                     room     = new RoomInitList() {RoomID = id};
@@ -74,6 +120,10 @@ namespace web
                     room.Message        = "";
                     room.LastUpdateTime = DateTime.Now;
                     room.SaveAsync();
+                    if (!AllRoomIds.Contains(id))
+                    {
+                        AllRoomIds.Add(id);
+                    }
                     goto beginNext;
                 }
                 return null;
@@ -129,18 +179,30 @@ namespace web
                 entity.GuardNum       = guardTop?.Num  ?? 0;
                 entity.LastUpdateTime = DateTime.Now;
                 entity.SaveAsync();
+
+                var dto = SortData.FirstOrDefault(c => c.room_id == id);
+                if (dto == null)
+                {
+                    dto = new RoomUserDataDto();
+                    SortData.Add(dto);
+                }
+                dto.room_id    = entity.RoomID;
+                dto.uid        = entity.Uid;
+                dto.fans_num   = entity.FansNum;
+                dto.follow_num = entity.FollowNum;
+                dto.guard_num  = entity.GuardNum;
                 return entity;
             }
             return null;
         }
 
-        public static RoomInit GetRoomInitByRoomId(long roomid)
+        public static async Task<RoomInit> GetRoomInitByRoomId(long roomid)
         {
             try
             {
                 RestClient client = new RestClient();
                 RestRequest request = new RestRequest($"https://api.live.bilibili.com/room/v1/Room/room_init?id={roomid}", Method.GET);
-                IRestResponse<RoomRsp<RoomInfoData>> execute = client.Execute<RoomRsp<RoomInfoData>>(request);
+                IRestResponse<RoomRsp<RoomInfoData>> execute = await client.ExecuteTaskAsync<RoomRsp<RoomInfoData>>(request);
                 if (execute.StatusCode == HttpStatusCode.OK)
                 {
                     if (execute.Data != null && execute.Data.Code == 0)
@@ -177,7 +239,7 @@ namespace web
                     {
                         Console.WriteLine($"GetFanGiftsByRoomId:{roomid}:{execute.Content}");
                     }
-                    FanGifts.FindByKey(roomid)?.Delete();
+                    //FanGifts.FindByKey(roomid)?.Delete();
                 }
             }
             catch (Exception e)
@@ -204,7 +266,7 @@ namespace web
                     {
                         Console.WriteLine($"GetGuardTopByUid:{uid}:{execute.Content}");
                     }
-                    GuardTop.FindByKey(uid)?.Delete();
+                    //GuardTop.FindByKey(uid)?.Delete();
                 }
             }
             catch (Exception e)
@@ -231,7 +293,7 @@ namespace web
                     {
                         Console.WriteLine($"GetFollowNumByUid:{uid}:{execute.Content}");
                     }
-                    FollowNum.FindByKey(uid)?.Delete();
+                    //FollowNum.FindByKey(uid)?.Delete();
                 }
             }
             catch (Exception e)

@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace aspCore.Extensions
 {
@@ -20,7 +21,7 @@ namespace aspCore.Extensions
     public class WildcardCorsService : CorsService
     {
         public WildcardCorsService(IOptions<CorsOptions> options)
-            : base(options)
+            : base(options, NullLoggerFactory.Instance)
         {
         }
 

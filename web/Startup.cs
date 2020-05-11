@@ -5,17 +5,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading;
 using aspCore.Extensions;
-using BiliEntity;
+using ImCore;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using NewLife.Log;
-using NewLife.Threading;
 using Swashbuckle.AspNetCore.Swagger;
-using LogLevel = Microsoft.Extensions.Logging.LogLevel;
 
 namespace web
 {
@@ -30,6 +24,9 @@ namespace web
 
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddOptions();
+            services.AddMemoryCache();
+           
             services.AddMvc();
             services.AddSwaggerGen(options => { options.SwaggerDoc("v1", new Info()); });
             services.Add(ServiceDescriptor.Transient<ICorsService, WildcardCorsService>());
@@ -51,18 +48,43 @@ namespace web
         public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
         {
             XTrace.UseConsole();
-//            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-//            Console.OutputEncoding = Encoding.GetEncoding("GB2312");
-//            Console.InputEncoding  = Encoding.GetEncoding("GB2312");
-//            loggerFactory.AddConsole(LogLevel.Error);
 
+            #region 数据同步到Mysql
+            //            DAL dal = DAL.Create("BiliCenter");
+            //            
+            //            string dbConnectionString = dal.Db.ConnectionString;
+            //            IFreeSql loadFreeSql = FreeSqlHelper.GetFreeSql(dbConnectionString, DataType.Sqlite);
+            //            IFreeSql freeSql = FreeSqlHelper.GetFreeSql(dal.Db.ConnectionString, DataType.MySql, true);
+            //            
+            //            List<RoomInitList> roomInitLists = loadFreeSql.Select<RoomInitList>().ToList();
+            //            freeSql.Insert<RoomInitList>(roomInitLists).InsertIdentity().OnDuplicateKeyUpdate().ExecuteAffrows();
+            //            freeSql.Insert<RoomSort>(loadFreeSql.Select<RoomSort>().ToList()).InsertIdentity().OnDuplicateKeyUpdate().ExecuteAffrows();
+            //            freeSql.Insert<GuardTop>(loadFreeSql.Select<GuardTop>().ToList().Select(r =>
+            //            {
+            //                r.Data = "";
+            //                return r;
+            //            })).InsertIdentity().OnDuplicateKeyUpdate().ExecuteAffrows();
+            //            freeSql.Insert<FollowNum>(loadFreeSql.Select<FollowNum>().ToList().Select(r =>
+            //            {
+            //                r.Data = "";
+            //                return r;
+            //            })).InsertIdentity().OnDuplicateKeyUpdate().ExecuteAffrows();
+            //            freeSql.Insert<FanGifts>(loadFreeSql.Select<FanGifts>().ToList().Select(r =>
+            //            {
+            //                r.Message = "";
+            //                return r;
+            //            })).InsertIdentity().OnDuplicateKeyUpdate().ExecuteAffrows();
+            #endregion
+
+            FreeSqlHelper.Init();
             if (env.IsDevelopment())
                 app.UseDeveloperExceptionPage();
 
             app.UseDefaultFiles();
             app.UseStaticFiles();
             app.UseCors("bilibili");
-//            app.UseCors("free");
+            
+            //            app.UseCors("free");
             app.UseMvc();
             app.UseSwagger().UseSwaggerUI(options => { options.SwaggerEndpoint("/swagger/v1/swagger.json", "HKERP API V1"); });
 
@@ -90,7 +112,7 @@ namespace web
                 {
                     //Console.WriteLine(t.clientId + "下线了");
                 });
-            
+
 //            TimerX ShowState = new TimerX(state =>
 //                {
 //                    //if (queueLazyValue.RoomNeedLoad.Count > 0 || queueLazyValue.QueueRoomSet.Count > 0 || queueLazyValue.ProcessCollection.Count > 0)
@@ -99,40 +121,40 @@ namespace web
 //                    }
 //                }, null, 1_000, 1_000)
 //                { Async = true };
-            TimerX autoCheck = new TimerX(state =>
-            {
-                if (!RoomQueue.Instance.RoomNeedLoad.Any())
-                {
-                    IList<RoomInitList> rooms = RoomInitList.FindAll(RoomInitList._.RoomID.NotIn(RoomSort.FindSQL(null, null, RoomSort._.RoomID)), selects: RoomInitList._.RoomID);
-                    if (rooms.Any())
-                    {
-                        RoomQueue.Instance.RoomNeedLoad.AddRange(rooms.Select(r => r.RoomID));
-                    }
-                    var dateLimit = DateTime.Today.AddDays(-1);
-                    IList<RoomSort> roomSorts = RoomSort.FindAll(RoomSort._.LastUpdateTime < dateLimit, $"{RoomSort._.LastUpdateTime} asc", RoomSort._.RoomID, 0, 0);
-                    if (roomSorts.Any())
-                    {
-                        RoomQueue.Instance.RoomNeedLoad.AddRange(roomSorts.Select(r => r.RoomID));
-                    }
-                    RoomQueue.Instance.RoomNeedLoad.RemoveAll(r => RoomQueue.Instance.ProcessCollection.Contains(r) || RoomQueue.Instance.QueueRoomSet.Contains(r));
-                }
-                var updateIds = RoomQueue.Instance.RoomNeedLoad.Distinct().Take(500).ToList();
-                if (updateIds.Any())
-                {
-                    updateIds.Distinct().ToList().AsParallel().ForAll(r =>
-                    {
-                        if (!RoomQueue.Instance.ProcessCollection.Contains(r))
-                        {
-                            RoomQueue.Instance.ProcessCollection.Add(r);
-                        }
-                    });
-                    RoomQueue.Instance.RoomNeedLoad.RemoveAll(c => updateIds.Contains(c));
-                }
-            }, null, 1000, 30_000)
-            {
-                Async      = true,
-                CanExecute = () => RoomQueue.Instance.ProcessCollection.Count < 500
-            };
+//            TimerX autoCheck = new TimerX(state =>
+//            {
+//                if (!RoomQueue.Instance.RoomNeedLoad.Any())
+//                {
+//                    IList<RoomInitList> rooms = RoomInitList.FindAll(RoomInitList._.RoomID.NotIn(RoomSort.FindSQL(null, null, RoomSort._.RoomID)), selects: RoomInitList._.RoomID);
+//                    if (rooms.Any())
+//                    {
+//                        RoomQueue.Instance.RoomNeedLoad.AddRange(rooms.Select(r => r.RoomID));
+//                    }
+//                    var dateLimit = DateTime.Today.AddDays(-1);
+//                    IList<RoomSort> roomSorts = RoomSort.FindAll(RoomSort._.LastUpdateTime < dateLimit, $"{RoomSort._.LastUpdateTime} asc", RoomSort._.RoomID, 0, 0);
+//                    if (roomSorts.Any())
+//                    {
+//                        RoomQueue.Instance.RoomNeedLoad.AddRange(roomSorts.Select(r => r.RoomID));
+//                    }
+//                    RoomQueue.Instance.RoomNeedLoad.RemoveAll(r => RoomQueue.Instance.ProcessCollection.Contains(r) || RoomQueue.Instance.QueueRoomSet.Contains(r));
+//                }
+//                var updateIds = RoomQueue.Instance.RoomNeedLoad.Distinct().Take(500).ToList();
+//                if (updateIds.Any())
+//                {
+//                    updateIds.Distinct().ToList().AsParallel().ForAll(r =>
+//                    {
+//                        if (!RoomQueue.Instance.ProcessCollection.Contains(r))
+//                        {
+//                            RoomQueue.Instance.ProcessCollection.Add(r);
+//                        }
+//                    });
+//                    RoomQueue.Instance.RoomNeedLoad.RemoveAll(c => updateIds.Contains(c));
+//                }
+//            }, null, 1000, 30_000)
+//            {
+//                Async      = true,
+//                CanExecute = () => RoomQueue.Instance.ProcessCollection.Count < 500
+//            };
             //            new TimerX(state =>
             //            {
             //                IList<RoomInitList> allRoom = RoomInitList.FindAll();

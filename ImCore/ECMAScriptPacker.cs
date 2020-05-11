@@ -24,7 +24,7 @@ namespace Dean.Edwards
 	/// <summary>
 	/// Packs a javascript file into a smaller area, removing unnecessary characters from the output.
 	/// </summary>
-    public class ECMAScriptPacker
+    public class ECMAScriptPacker : IDisposable
     {
         /// <summary>
         /// The encoding level to use. See http://dean.edwards.name/packer/usage/ for more info.
@@ -480,6 +480,11 @@ namespace Dean.Edwards
             }
 
             #endregion
+        }
+
+        public void Dispose()
+        {
+            GC.SuppressFinalize(this);
         }
     }
 }

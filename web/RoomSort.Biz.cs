@@ -8,14 +8,18 @@ using NewLife.Web;
 ﻿using NewLife.Data;
 using XCode;
 using XCode.Configuration;
-using XCode.Membership;
+ using XCode.Extension;
+ using XCode.Membership;
 
 namespace BiliEntity
 {
     /// <summary>房间统计排序表</summary>
     [ModelCheckMode(ModelCheckModes.CheckTableWhenFirstUse)]
     public class RoomSort : RoomSort<RoomSort> {
-       
+        public RoomSort()
+        {
+            Meta.Cache.Expire = 300;
+        }
     }
     
     /// <summary>房间统计排序表</summary>

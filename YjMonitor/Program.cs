@@ -26,6 +26,7 @@ using NewLife.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using XCode;
+using XCode.DataAccessLayer;
 using YjMonitorNet;
 
 namespace YjMonitor
@@ -215,6 +216,7 @@ namespace YjMonitor
 
         static void Main(string[] args)
         {
+            DAL.AddConnStr("BiliCenter", "Server=127.0.0.1;port=3306;Database=im;Uid=poster;Pwd=;SslMode=none;Convert Zero Datetime=True;Allow Zero Datetime=True;Allow User Variables=True;", null,"mysql");
             XTrace.UseConsole();
             CSRedisClient csRedisClient = new CSRedis.CSRedisClient(JsonConfig<YjMonitorConfig>.Current.Redis);
             RedisHelper.Initialization(csRedisClient);

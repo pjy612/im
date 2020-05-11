@@ -4,6 +4,117 @@
         <name>ImCore</name>
     </assembly>
     <members>
+        <member name="T:Dean.Edwards.ECMAScriptPacker">
+            <summary>
+            Packs a javascript file into a smaller area, removing unnecessary characters from the output.
+            </summary>
+        </member>
+        <member name="T:Dean.Edwards.ECMAScriptPacker.PackerEncoding">
+            <summary>
+            The encoding level to use. See http://dean.edwards.name/packer/usage/ for more info.
+            </summary>
+        </member>
+        <member name="P:Dean.Edwards.ECMAScriptPacker.Encoding">
+            <summary>
+            The encoding level for this instance
+            </summary>
+        </member>
+        <member name="P:Dean.Edwards.ECMAScriptPacker.FastDecode">
+            <summary>
+            Adds a subroutine to the output to speed up decoding
+            </summary>
+        </member>
+        <member name="P:Dean.Edwards.ECMAScriptPacker.SpecialChars">
+            <summary>
+            Replaces special characters
+            </summary>
+        </member>
+        <member name="P:Dean.Edwards.ECMAScriptPacker.Enabled">
+            <summary>
+            Packer enabled
+            </summary>
+        </member>
+        <member name="M:Dean.Edwards.ECMAScriptPacker.#ctor(Dean.Edwards.ECMAScriptPacker.PackerEncoding,System.Boolean,System.Boolean)">
+            <summary>
+            Constructor
+            </summary>
+            <param name="encoding">The encoding level for this instance</param>
+            <param name="fastDecode">Adds a subroutine to the output to speed up decoding</param>
+            <param name="specialChars">Replaces special characters</param>
+        </member>
+        <member name="M:Dean.Edwards.ECMAScriptPacker.Pack(System.String)">
+            <summary>
+            Packs the script
+            </summary>
+            <param name="script">the script to pack</param>
+            <returns>the packed script</returns>
+        </member>
+        <member name="T:Dean.Edwards.ParseMaster">
+            <summary>
+            a multi-pattern parser
+            </summary>
+        </member>
+        <member name="T:Dean.Edwards.ParseMaster.MatchGroupEvaluator">
+            <summary>
+            Delegate to call when a regular expression is found.
+            Use match.Groups[offset + &lt;group number&gt;].Value to get
+            the correct subexpression
+            </summary>
+        </member>
+        <member name="P:Dean.Edwards.ParseMaster.IgnoreCase">
+            <summary>
+            Ignore Case?
+            </summary>
+        </member>
+        <member name="P:Dean.Edwards.ParseMaster.EscapeChar">
+            <summary>
+            Escape Character to use
+            </summary>
+        </member>
+        <member name="M:Dean.Edwards.ParseMaster.Add(System.String)">
+            <summary>
+            Add an expression to be deleted
+            </summary>
+            <param name="expression">Regular Expression String</param>
+        </member>
+        <member name="M:Dean.Edwards.ParseMaster.Add(System.String,System.String)">
+            <summary>
+            Add an expression to be replaced with the replacement string
+            </summary>
+            <param name="expression">Regular Expression String</param>
+            <param name="replacement">Replacement String. Use $1, $2, etc. for groups</param>
+        </member>
+        <member name="M:Dean.Edwards.ParseMaster.Add(System.String,Dean.Edwards.ParseMaster.MatchGroupEvaluator)">
+            <summary>
+            Add an expression to be replaced using a callback function
+            </summary>
+            <param name="expression">Regular expression string</param>
+            <param name="replacement">Callback function</param>
+        </member>
+        <member name="M:Dean.Edwards.ParseMaster.Exec(System.String)">
+            <summary>
+            Executes the parser
+            </summary>
+            <param name="input">input string</param>
+            <returns>parsed string</returns>
+        </member>
+        <member name="M:Dean.Edwards.ParseMaster.getPatterns">
+            <summary>
+            builds the patterns into a single regular expression
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:Dean.Edwards.ParseMaster.replacement(System.Text.RegularExpressions.Match)">
+            <summary>
+            Global replacement function. Called once for each match found
+            </summary>
+            <param name="match">Match found</param>
+        </member>
+        <member name="M:Dean.Edwards.ParseMaster.replacementString(System.Text.RegularExpressions.Match,System.Int32,System.String,System.Int32)">
+            <summary>
+            Replacement function for complicated lookups (e.g. Hello $3 $2)
+            </summary>
+        </member>
         <member name="T:ImClientOptions">
             <summary>
             im 核心类实现的配置所需
@@ -73,6 +184,14 @@
             <returns></returns>
         </member>
         <member name="M:ImClient.PrevConnectServer(System.Guid,ImClientInfo)">
+            <summary>
+            ImServer 连接前的负载、授权，返回 ws 目标地址，使用该地址连接 websocket 服务端
+            </summary>
+            <param name="clientId">客户端id</param>
+            <param name="clientMetaData">客户端相关信息，比如ip</param>
+            <returns>websocket 地址：ws://xxxx/ws?token=xxx</returns>
+        </member>
+        <member name="M:ImClient.PrevConnectServerAsync(System.Guid,ImClientInfo)">
             <summary>
             ImServer 连接前的负载、授权，返回 ws 目标地址，使用该地址连接 websocket 服务端
             </summary>
@@ -280,6 +399,24 @@
             <param name="senderClientId">发送者的客户端id</param>
             <param name="chan">群聊频道名</param>
             <param name="message">消息</param>
+        </member>
+        <member name="M:ImServerExtenssions.UseImServer(Microsoft.AspNetCore.Builder.IApplicationBuilder,ImServerOptions)">
+            <summary>
+            启用 ImServer 服务端
+            </summary>
+            <param name="app"></param>
+            <param name="options"></param>
+            <returns></returns>
+        </member>
+        <member name="T:ImServerOptions">
+            <summary>
+            im 核心类实现的配置所需
+            </summary>
+        </member>
+        <member name="P:ImServerOptions.Server">
+            <summary>
+            设置服务名称，它应该是 servers 内的一个
+            </summary>
         </member>
     </members>
 </doc>

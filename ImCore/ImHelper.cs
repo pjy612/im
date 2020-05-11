@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 /// <summary>
 /// im 核心类实现的静态代理类
@@ -25,6 +26,8 @@ public static class ImHelper
     /// <param name="clientMetaData">客户端相关信息，比如ip</param>
     /// <returns>websocket 地址：ws://xxxx/ws?token=xxx</returns>
     public static string PrevConnectServer(Guid clientId, ImClientInfo clientMetaData) => Instance.PrevConnectServer(clientId, clientMetaData);
+
+    public static async Task<string> PrevConnectServerAsync(Guid clientId, ImClientInfo clientMetaData) => await Instance.PrevConnectServerAsync(clientId, clientMetaData);
 
     /// <summary>
     /// 向指定的多个客户端id发送消息

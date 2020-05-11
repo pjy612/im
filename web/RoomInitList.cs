@@ -1,7 +1,8 @@
 ﻿﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Xml.Serialization;
+ using System.ComponentModel.DataAnnotations;
+ using System.Xml.Serialization;
 using XCode;
 using XCode.Configuration;
 using XCode.DataAccessLayer;
@@ -49,6 +50,7 @@ namespace BiliEntity
         [DisplayName("房间返回值")]
         [Description("房间返回值")]
         [DataObjectField(false, false, false, 0)]
+        [MaxLength(-1)]
         [BindColumn("message", "房间返回值", "longtext")]
         public virtual String Message
         {

@@ -9,6 +9,7 @@ using System.Text;
 using aspCore.Extensions;
 using imServer.Configuration;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using NewLife.Log;
 
 namespace imServer
 {
@@ -27,6 +28,9 @@ namespace imServer
 
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddMvc();
+            //services.AddSwaggerGen(options => { options.SwaggerDoc("v1", new Info()); });
+
             services.Configure<ImServerOption>(Config.GetSection(CONFIG.OPTIONS));
             services.Add(ServiceDescriptor.Transient<ICorsService, WildcardCorsService>());
             services.AddCors(options =>
@@ -48,6 +52,7 @@ namespace imServer
 
         public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
         {
+            XTrace.UseConsole();
 //            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 //            Console.OutputEncoding = Encoding.GetEncoding("GB2312");
 //            Console.InputEncoding  = Encoding.GetEncoding("GB2312");
@@ -62,6 +67,7 @@ namespace imServer
                 Servers = config.Servers.Split(";"),
                 Server  = config.Server
             });
+            app.UseMvc();
         }
     }
 }

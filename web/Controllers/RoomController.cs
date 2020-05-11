@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using BiliEntity;
 using Microsoft.AspNetCore.Http;
@@ -10,6 +11,7 @@ using NewLife.Caching;
 using NewLife.Serialization;
 using NewLife.Threading;
 using Newtonsoft.Json;
+using RestSharp;
 using XCode.Cache;
 
 namespace web.Controllers
@@ -17,12 +19,9 @@ namespace web.Controllers
     [Route("room")]
     public class RoomController : Controller
     {
-        private static readonly List<long> staticRoomList = new List<long>();
-        private EntityCache<RoomInitList> CacheAllRoomIds;
-
         public RoomController()
         {
-            CacheAllRoomIds = new EntityCache<RoomInitList> {FillListMethod = () => RoomInitList.FindAll(null, selects: RoomInitList._.RoomID), Expire = 60};
+            
         }
 
         [HttpGet("v1/Room/room_init")]
@@ -44,9 +43,18 @@ namespace web.Controllers
                         RoomQueue.Instance.QueueRoomSet.Add(id);
                     }
                 }
-                return new { code = -1 ,data = roomInitList };
+                return new {code = -1, data = roomInitList};
             }
             return new {code = -1};
+        }
+
+        [HttpGet("v1/Danmu/getConf")]
+        public async Task<object> getConf(long room_id)
+        {
+            RestClient client = new RestClient();
+            RestRequest req = new RestRequest($"https://api.live.bilibili.com/room/v1/Danmu/getConf?room_id={room_id}&platform=pc&player=web", Method.GET);
+            IRestResponse<object> task = await client.ExecuteGetTaskAsync<object>(req);
+            return task.Data;
         }
 
         [HttpPost("v1/Room/room_init_list")]
@@ -54,14 +62,17 @@ namespace web.Controllers
         {
             if (ids != null && ids.Any())
             {
-                ids.RemoveAll(r => RoomQueue.Instance.QueueRoomSet.Contains(r));
-                ids.RemoveAll(r => RoomQueue.Instance.ProcessCollection.Contains(r));
-                IList<RoomSort> all = RoomSort.FindAll(null, selects: RoomSort._.RoomID);
-                ids.RemoveAll(r => all.Any(c => c.RoomID == r));
-                if (ids.Any())
+                Task.Run(() =>
                 {
-                    ids.ForEach(r => RoomQueue.Instance.QueueRoomSet.Add(r));
-                }
+                    ids.RemoveAll(r => RoomQueue.Instance.QueueRoomSet.Contains(r));
+                    ids.RemoveAll(r => RoomQueue.Instance.ProcessCollection.Contains(r));
+                    List<long> allRoomIds = RoomQueue.Instance.GetAllRoomIds();
+                    ids.RemoveAll(r => allRoomIds.Contains(r));
+                    if (ids.Any())
+                    {
+                        ids.AsParallel().ForAll(r => RoomQueue.Instance.QueueRoomSet.Add(r));
+                    }
+                });
                 return new {code = 0};
             }
             return new {code = -1};
@@ -70,11 +81,11 @@ namespace web.Controllers
         [HttpGet("v1/Room/room/all")]
         public object room_all()
         {
-            IList<RoomInitList> roomInitLists = CacheAllRoomIds.Entities;
+            var ids = RoomQueue.Instance.GetAllRoomIds();
             return new
             {
                 code = 0,
-                data = roomInitLists.Select(r => r.RoomID).Distinct().ToList()
+                data = ids.Distinct().ToList()
             };
         }
 
@@ -134,73 +145,80 @@ namespace web.Controllers
 //            return JsonConvert.DeserializeObject<RoomInit>(room?.Message);
         }
 
-        [HttpGet("v1/Room/sort")]
-        public object room_sort(int page = 0, int size = 5000, bool full = false)
-        {
-            if (size <= 1000) size = 1000;
-            List<RoomUserDataDto> roomUserDataDtos = room_sort_nocahce();
-            dynamic data = new System.Dynamic.ExpandoObject();
-            data.code        = 0;
-            data.page        = page;
-            data.size        = size;
-            data.page_count  = (roomUserDataDtos.Count - 1) / size + 1;
-            data.total_count = roomUserDataDtos.Count;
-            List<RoomUserDataDto> sorted = roomUserDataDtos.Skip(page * size).Take(size).ToList();
-            data.room_ids = sorted.Select(r => r.room_id).ToArray();
-            if (full)
-            {
-                data.data = sorted.ToArray();
-            }
-            return data;
-        }
+//        [HttpGet("v1/Room/sort")]
+//        public async Task<object> room_sort(int page = 0, int size = 5000, bool full = false)
+//        {
+//            if (size <= 1000) size = 1000;
+//            List<RoomUserDataDto> roomUserDataDtos = await room_sort_nocahce();
+//            dynamic data = new System.Dynamic.ExpandoObject();
+//            data.code        = 0;
+//            data.page        = page;
+//            data.size        = size;
+//            data.page_count  = (roomUserDataDtos.Count - 1) / size + 1;
+//            data.total_count = roomUserDataDtos.Count;
+//            List<RoomUserDataDto> sorted = roomUserDataDtos.Skip(page * size).Take(size).ToList();
+//            data.room_ids = sorted.Select(r => r.room_id).ToArray();
+//            if (full)
+//            {
+//                data.data = sorted.ToArray();
+//            }
+//            return data;
+//        }
 
         [HttpGet("v1/Room/sort/all")]
-        public object room_sort_all()
+        public async Task<object> room_sort_all()
         {
-            List<RoomUserDataDto> sorted = room_sort_nocahce();
+            var sorted = (await room_sort_nocahce()).Select(r => r.room_id).ToArray();
+            //List<RoomUserDataDto> sorted = await room_sort_nocahce();
             return new
             {
                 code = 0,
-                data = sorted.Select(r => r.room_id).ToArray()
+                data = sorted
             };
         }
 
-        [HttpGet("v1/Room/sort/list")]
-        public object room_sort_list(int page = 0, int size = 5000)
+//        [HttpGet("v1/Room/sort/list")]
+//        public async Task<object> room_sort_list(int page = 0, int size = 5000)
+//        {
+//            if (size <= 1000) size = 1000;
+//            List<RoomUserDataDto> roomUserDataDtos = await room_sort_nocahce();
+//            roomUserDataDtos.ForEach(r =>
+//            {
+//                if (!staticRoomList.Contains(r.room_id))
+//                {
+//                    staticRoomList.Add(r.room_id);
+//                }
+//            });
+//            dynamic data = new System.Dynamic.ExpandoObject();
+//            data.code        = 0;
+//            data.page        = page;
+//            data.size        = size;
+//            data.page_count  = (staticRoomList.Count - 1) / size + 1;
+//            data.total_count = staticRoomList.Count;
+//            data.roomid      = staticRoomList.Skip(page * size).Take(size).ToList();
+//            return data;
+//        }
+        private static SemaphoreSlim cacheLock = new SemaphoreSlim(1, 1);
+
+        
+
+        private async Task<List<RoomUserDataDto>> room_sort_nocahce()
         {
-            if (size <= 1000) size = 1000;
-            List<RoomUserDataDto> roomUserDataDtos = room_sort_nocahce();
-            roomUserDataDtos.ForEach(r =>
+            //await cacheLock.WaitAsync();
+            return await Task.Run(() =>
             {
-                if (!staticRoomList.Contains(r.room_id))
+                try
                 {
-                    staticRoomList.Add(r.room_id);
+                    return RoomQueue.Instance.GetSort()
+                        .Where(r => (r.fans_num > 3 && r.follow_num > 300) || r.guard_num > 0)
+                        .OrderByDescending(r => r.guard_num).ThenByDescending(r => r.fans_num).ThenByDescending(r => r.follow_num).ToList();
+                }
+                finally
+                {
+                    //cacheLock.Release();
                 }
             });
-            dynamic data = new System.Dynamic.ExpandoObject();
-            data.code        = 0;
-            data.page        = page;
-            data.size        = size;
-            data.page_count  = (staticRoomList.Count - 1) / size + 1;
-            data.total_count = staticRoomList.Count;
-            data.roomid      = staticRoomList.Skip(page * size).Take(size).ToList();
-            return data;
-        }
 
-        private List<RoomUserDataDto> room_sort_nocahce()
-        {
-            IList<RoomSort> findAllWithCache = RoomSort.FindAllWithCache();
-            List<RoomUserDataDto> userDatas = findAllWithCache.Select(r => new RoomUserDataDto
-            {
-                room_id    = r.RoomID,
-                uid        = r.Uid,
-                fans_num   = r.FansNum,
-                follow_num = r.FollowNum,
-                guard_num  = r.GuardNum,
-            }).ToList();
-            return userDatas
-                .Where(r => (r.fans_num > 3 && r.follow_num > 300) || r.guard_num > 0)
-                .OrderByDescending(r => r.guard_num).ThenByDescending(r => r.fans_num).ThenByDescending(r => r.follow_num).ToList();
         }
     }
 }

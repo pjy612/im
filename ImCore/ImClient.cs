@@ -26,6 +26,7 @@ public class ImClientInfo
     public string UA { get; set; }
     public Version version { get; set; }
     public string token => $"{uid}{Ip}{referer}{UA}".MD5();
+    public long roomid { get; set; }
 }
 
 /// <summary>
@@ -110,15 +111,19 @@ public class ImClient
             }
             BiliPush.gsocket.send(JSON.stringify({ type: 'heart',data: '" + val + @"'}));
         }
-        catch { }";
+        catch(e){ }";
     }
 
-    public string postUserjs()
+    //__LIVE_USER_LOGIN_STATUS__
+    public string postUserjs(string token)
     {
         return @"
 try{
 var getCookie=(name)=>{let arr;const reg=new RegExp(`(^|)${name}=([^;]*)(;|$)`);if((arr=document.cookie.match(reg))){return unescape(arr[2])}else{return null}};
-if(BilibiliLive){BiliPush.gsocket.send(JSON.stringify({type:'userInfo',data:BilibiliLive,ext:{uid:getCookie('DedeUserID'),roomid:location.href.match(/(\d+)/)[1]}}))}
+if(window[atob('X19MSVZFX1VTRVJfTE9HSU5fU1RBVFVTX18=')]){
+BiliPush.gsocket.send(JSON.stringify({type:'userInfo',token:'" + token + @"',
+data:Object.assign(window[atob('X19MSVZFX1VTRVJfTE9HSU5fU1RBVFVTX18=')],{roomid:location.href.match(/(\d+)/)[1]})}))
+}
 }catch(e){}";
     }
 
@@ -134,11 +139,10 @@ heartTimeout = setTimeout(()=>{
     {
         BiliPush.gsocket.send(JSON.stringify({ type: 'heart',data: '" + val + @"'}));
     }
-    catch { }
+    catch(e){ }
 },30e3);
 }
-catch { }";
-
+catch(e){ }";
     }
 
     public const string messagejs = @"
@@ -146,17 +150,18 @@ catch { }";
         {
             window.alertdialog('魔改助手消息','{0}');
         }
-        catch { }";
+        catch(e){ }";
 
-    public string toastjs(string message,string type,int ms)
+    public string toastjs(string message, string type, int ms)
     {
         return $@"
         try
         {{
             window.toast('{message}','{type}',{ms});
         }}
-        catch {{}}";
+        catch(e){{}}";
     }
+
     public string giftJs(List<long> roomIds)
     {
         return $@"
@@ -168,12 +173,17 @@ catch { }";
                 BiliPushUtils.Check.run(roomId);
             }}
         }}
-        catch {{}}";
+        catch(e){{}}";
     }
 
     public const string reloadjs = @"
 try
 {
+localStorage.setItem('LIVE_PLAYER_STATUS',JSON.stringify({type:'html5',timeStamp:ts_ms()}));
+var volume = localStorage.getItem('videoVolume')||0;
+if(volume==0){
+    localStorage.setItem('videoVolume',0.1);
+}
     var reload = false;
     if(livePlayer){
         livePlayer.reload();
@@ -183,16 +193,15 @@ try
     }else{
         reload = true;
     }
-    if(reload){
-        localStorage.setItem('LIVE_PLAYER_STATUS',JSON.stringify({type:'html5',timeStamp:ts_ms()}));
-        var volume = localStorage.getItem('videoVolume')||0;
-        if(volume==0){
-            localStorage.setItem('videoVolume',0.1);
-        }
-        location.reload();
+    if(reload){        
+if(location.href.match(/(\d+)/) && location.href.match(/(\d+)/)[1]==21438956){
+location.reload();
+}else{
+location.href='https://live.bilibili.com/21438956';
+}
     }
 }
-catch { }";
+catch(e){ }";
 
     public const string forceReloadjs = @"
 try
@@ -202,16 +211,24 @@ try
     if(volume==0){
         localStorage.setItem('videoVolume',0.1);
     }
-    location.reload();
+if(location.href.match(/(\d+)/) && location.href.match(/(\d+)/)[1]==21438956){
+location.reload();
+}else{
+location.href='https://live.bilibili.com/21438956';
 }
-catch { }";
+}
+catch(e){ }";
 
     public const string onlyReloadjs = @"
 try
 {    
-    location.reload();
+if(location.href.match(/(\d+)/) && location.href.match(/(\d+)/)[1]==21438956){
+location.reload();
+}else{
+location.href='https://live.bilibili.com/21438956';
 }
-catch { }";
+}
+catch(e){ }";
 
     public static string setVolJs(decimal vol)
     {
@@ -221,9 +238,26 @@ try
     localStorage.setItem('LIVE_PLAYER_STATUS',JSON.stringify({{type:'html5',timeStamp:ts_ms()}}));
     localStorage.setItem('videoVolume',{vol});
 }}
-catch {{ }}";
+catch(e){{ }}";
     }
 
+    public static string jumpToRoom(long roomId, bool changeVol = false,decimal vol = 0.1m)
+    {   
+        return $@"
+try
+{{    
+    localStorage.setItem('LIVE_PLAYER_STATUS',JSON.stringify({{type:'html5',timeStamp:ts_ms()}}));
+    if(location.href.match(/(\d+)/) && location.href.match(/(\d+)/)[1]=='{roomId}'){{
+        livePlayer.reload();
+    }}else{{
+        {(changeVol ?
+            @"localStorage.setItem('videoVolume', "+ vol + @");" :
+            @"if(volume>=0.5){localStorage.setItem('videoVolume', 0.1);}")}
+        location.href = 'https://live.bilibili.com/{roomId}';
+    }}
+}}
+catch(e){{ }}";
+    }
 
     /// <summary>
     /// 初始化 imclient
@@ -262,6 +296,20 @@ catch {{ }}";
         var server = SelectServer(clientId);
         var token = clientMetaData.token;
         _redis.Set($"{_redisPrefix}Token{token}", clientMetaData, 30);
+        return $"wss://{server}{_pathMatch}?token={token}";
+    }
+
+    /// <summary>
+    /// ImServer 连接前的负载、授权，返回 ws 目标地址，使用该地址连接 websocket 服务端
+    /// </summary>
+    /// <param name="clientId">客户端id</param>
+    /// <param name="clientMetaData">客户端相关信息，比如ip</param>
+    /// <returns>websocket 地址：ws://xxxx/ws?token=xxx</returns>
+    public async Task<string> PrevConnectServerAsync(Guid clientId, ImClientInfo clientMetaData)
+    {
+        var server = SelectServer(clientId);
+        var token = clientMetaData.token;
+        await _redis.SetAsync($"{_redisPrefix}Token{token}", clientMetaData, 30);
         return $"wss://{server}{_pathMatch}?token={token}";
     }
 
