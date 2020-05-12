@@ -21,7 +21,6 @@ namespace web.Controllers
     {
         public RoomController()
         {
-            
         }
 
         [HttpGet("v1/Room/room_init")]
@@ -200,25 +199,20 @@ namespace web.Controllers
 //        }
         private static SemaphoreSlim cacheLock = new SemaphoreSlim(1, 1);
 
-        
 
         private async Task<List<RoomUserDataDto>> room_sort_nocahce()
         {
-            //await cacheLock.WaitAsync();
-            return await Task.Run(() =>
+            await cacheLock.WaitAsync();
+            try
             {
-                try
-                {
-                    return RoomQueue.Instance.GetSort()
-                        .Where(r => (r.fans_num > 3 && r.follow_num > 300) || r.guard_num > 0)
-                        .OrderByDescending(r => r.guard_num).ThenByDescending(r => r.fans_num).ThenByDescending(r => r.follow_num).ToList();
-                }
-                finally
-                {
-                    //cacheLock.Release();
-                }
-            });
-
+                return RoomQueue.Instance.GetSort()
+                    .Where(r => (r.fans_num > 3 && r.follow_num > 300) || r.guard_num > 0)
+                    .OrderByDescending(r => r.guard_num).ThenByDescending(r => r.fans_num).ThenByDescending(r => r.follow_num).ToList();
+            }
+            finally
+            {
+                cacheLock.Release();
+            }
         }
     }
 }

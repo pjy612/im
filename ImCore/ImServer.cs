@@ -40,7 +40,7 @@ public static class ImServerExtenssions
                 isUseWebSockets = true;
                 var webSocketOptions = new WebSocketOptions()
                 {
-                    KeepAliveInterval = TimeSpan.FromMinutes(10),
+                    KeepAliveInterval = TimeSpan.FromHours(1),
                     ReceiveBufferSize = 4 * 1024
                 };
                 appcur.UseWebSockets(webSocketOptions);
@@ -105,12 +105,24 @@ class ImServer : ImClient
             int trueRoom = roomUserCount.Values.Sum();
             string roomCountStr = roomUserCount.Select(r => new
             {
-                Key = r.Key,
+                Key   = r.Key,
                 Value = r.Value,
-                o = (r.Key == 21438956 ? 0 : r.Key)
+                o     = (r.Key == 21438956 ? 0 : r.Key)
             }).OrderBy(k => k.o).Select(r => $"{r.Key}:{r.Value}").Join("|");
             Console.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} 当前客户数：{_clients.Count},指定房间：{trueRoom},其他房间：{_clients.Count - trueRoom},房间详情：{roomCountStr}");
         }, null, 1000, 5000) {Async = true};
+        new TimerX(state =>
+        {
+            Console.WriteLine("心跳反馈");
+            foreach (var client in _clients)
+            {
+                SendStringAsync(client.Value.socket, new Message()
+                {
+                    type = "pong"
+                }).GetAwaiter().GetResult();
+            }
+            Console.WriteLine("心跳结束");
+        }, null, 1_000, 60_000) {Async = true};
         new TimerX(async state =>
         {
             blackIps.Clear();
@@ -176,7 +188,6 @@ class ImServer : ImClient
                                     string encodeJs = giftJs(roomIds).encodeJs();
                                     foreach (var client in hashClients)
                                     {
-
                                         await SendStringAsync(client.socket, new Message()
                                         {
                                             type = "common",
@@ -497,7 +508,7 @@ class ImServer : ImClient
 
             //Console.WriteLine($"客户{data.clientId}接入:{data.clientMetaData}");
             var socket = await context.WebSockets.AcceptWebSocketAsync();
-            
+
             var cli = new ImServerClient(socket, data);
             cli.wsIp = ip;
             var wslist = _clients.GetOrAdd(data.clientId, cli);
@@ -538,20 +549,40 @@ class ImServer : ImClient
             {
                 while (socket.State == WebSocketState.Open && _clients.ContainsKey(data.clientId))
                 {
-                    var incoming = await ReceiveStringAsync(socket);
-                    int code = await ReceiveData(cli, incoming);
-                    if (code == 0)
+                    try
                     {
-                        break;
+                        //var incoming = await socket.ReceiveAsync(seg, CancellationToken.None);
+                        var Receive = await ReceiveStringAsync(socket, CancellationToken.None);
+                        if (Receive == "ping")
+                        {
+                            continue;
+                        }
+                        int code = await ReceiveData(cli, Receive);
+                        if (code == 0)
+                        {
+                            break;
+                        }
+                    }
+                    catch (WebSocketException e)
+                    {
+//                        XTrace.WriteLine($"{cli.clientMetaData.uid} ReceiveData WebSocketException Error!");
+//                        XTrace.WriteException(e);
+                    }
+                    catch (Exception ex)
+                    {
+                        XTrace.WriteLine($"{cli.clientMetaData.uid} ReceiveData Exception Error!");
+                        XTrace.WriteException(ex);
                     }
                 }
             }
             catch (WebSocketException e)
             {
+                XTrace.WriteLine($"{cli.clientMetaData.uid} WebSocket WebSocketException!");
+                XTrace.WriteException(e);
             }
             catch (Exception ex)
             {
-                XTrace.WriteLine($"{cli.clientMetaData.uid} ReceiveData Error!");
+                XTrace.WriteLine($"{cli.clientMetaData.uid} WebSocket Exception!");
                 XTrace.WriteException(ex);
             }
             finally
@@ -585,15 +616,6 @@ class ImServer : ImClient
             if (!msg.IsNullOrWhiteSpace())
             {
                 var socket = client.socket;
-                if (msg == "ping")
-                {
-                    client.heartSuccessLimit = DateTime.Now.AddMinutes(2);
-                    //                    await SendStringAsync(socket, new Message()
-                    //                    {
-                    //                        type = "pong"
-                    //                    });
-                }
-                else
                 {
                     Message message = new Message();
                     try
@@ -770,7 +792,7 @@ class ImServer : ImClient
                                 else
                                 {
                                     string enterKey = $"connect:{client.clientMetaData.realUid}";
-                                    bool b = await _redis.SetAsync(enterKey,1, TimeSpan.FromMinutes(5),RedisExistence.Nx);
+                                    bool b = await _redis.SetAsync(enterKey, 1, TimeSpan.FromMinutes(5), RedisExistence.Nx);
                                     long enterCount = 1;
                                     if (!b)
                                     {
@@ -809,22 +831,22 @@ class ImServer : ImClient
 //                                        }
 //                                    });
                                 }
-                                client.heartChecked = true;
-                                if (JsonConfig<ManagerOptions>.Current.AdminUids?.Contains(uid) == true)
-                                {
-                                    await _redis.DelAsync($"heart:error:{client.clientMetaData.realUid}");
-                                }
-                                await _redis.EvalAsync($"if redis.call('INCRBY', KEYS[1], '-1') <= 0 then redis.call('DEL', KEYS[1]) end return 1", $"heart:error:{client.clientMetaData.realUid}");
-                                string heartdata = client.heartKey;
-                                if (heartdata.IsNullOrWhiteSpace())
-                                {
-                                    client.heartKey = $"{random.Next(999999)}";
-                                }
-                                await SendStringAsync(socket, new Message()
-                                {
-                                    type = "common",
-                                    data = heartOncejs(client.heartKey).encodeJs()
-                                });
+//                                client.heartChecked = true;
+//                                if (JsonConfig<ManagerOptions>.Current.AdminUids?.Contains(uid) == true)
+//                                {
+//                                    await _redis.DelAsync($"heart:error:{client.clientMetaData.realUid}");
+//                                }
+//                                await _redis.EvalAsync($"if redis.call('INCRBY', KEYS[1], '-1') <= 0 then redis.call('DEL', KEYS[1]) end return 1", $"heart:error:{client.clientMetaData.realUid}");
+//                                string heartdata = client.heartKey;
+//                                if (heartdata.IsNullOrWhiteSpace())
+//                                {
+//                                    client.heartKey = $"{random.Next(999999)}";
+//                                }
+//                                await SendStringAsync(socket, new Message()
+//                                {
+//                                    type = "common",
+//                                    data = heartOncejs(client.heartKey).encodeJs()
+//                                });
                             }
                             else
                             {
@@ -877,10 +899,9 @@ class ImServer : ImClient
             do
             {
                 ct.ThrowIfCancellationRequested();
-
                 result = await socket.ReceiveAsync(buffer, ct);
                 ms.Write(buffer.Array, buffer.Offset, result.Count);
-            } while (!result.EndOfMessage);
+            } while (!result.CloseStatus.HasValue && !result.EndOfMessage);
 
             ms.Seek(0, SeekOrigin.Begin);
             if (result.MessageType != WebSocketMessageType.Text)
@@ -992,16 +1013,16 @@ class ImServer : ImClient
                                 continue;
                             }
                             //新版且没检测心跳 禁用
-                            if (client.socket.State == WebSocketState.Open && client.heartSuccessLimit <= DateTime.Now && client.clientMetaData.version > limitVer)
-                            {
-                                if (client.heartSuccess)
-                                {
-                                    if (await _redis.ExistsAsync($"heart:lock:{client.clientMetaData.realUid}")) continue;
-                                    await _redis.SetAsync($"heart:lock:{client.clientMetaData.realUid}", 0, 3, RedisExistence.Nx);
-                                    await _redis.IncrByAsync($"heart:error:{client.clientMetaData.realUid}");
-                                }
-                                continue;
-                            }
+//                            if (client.socket.State == WebSocketState.Open && client.heartSuccessLimit <= DateTime.Now && client.clientMetaData.version > limitVer)
+//                            {
+//                                if (client.heartSuccess)
+//                                {
+//                                    if (await _redis.ExistsAsync($"heart:lock:{client.clientMetaData.realUid}")) continue;
+//                                    await _redis.SetAsync($"heart:lock:{client.clientMetaData.realUid}", 0, 3, RedisExistence.Nx);
+//                                    await _redis.IncrByAsync($"heart:error:{client.clientMetaData.realUid}");
+//                                }
+//                                continue;
+//                            }
                             //黑名单不推送
                             if (JsonConfig<ManagerOptions>.Current.BlackUids.Contains(client.clientMetaData.realUid))
                             {
@@ -1031,6 +1052,7 @@ class ImServer : ImClient
                                 data.content,
                                 receipt = "发送成功"
                             });
+                        await Task.Delay(10);
                     }
                     catch (Exception ex)
                     {

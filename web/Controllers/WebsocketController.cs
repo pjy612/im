@@ -54,7 +54,7 @@ namespace web.Controllers
         [HttpPost("pre-connect")]
         public async Task<object> preConnect([FromForm] Guid? websocketId, [FromForm] int? uid, [FromForm] string version)
         {
-            await connectLock.WaitAsync();
+            //await connectLock.WaitAsync();
             try
             {
                 if (!ManagerOptions.Current.AdminUids.Contains(uid.ToLong()))
@@ -149,7 +149,7 @@ namespace web.Controllers
             }
             finally
             {
-                connectLock.Release();
+                //connectLock.Release();
             }
         }
 
