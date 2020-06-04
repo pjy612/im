@@ -225,8 +225,18 @@ namespace web.Controllers
             };
         }
 
+        [HttpPost("post_dm_storm")]
+        public object PostDmStorm(string msg, string roomId = "", bool force = false)
+        {
+            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "common", data = ImClient.dmStorm(msg, roomId, force).encodeJs()}));
+            return new
+            {
+                code = 0
+            };
+        }
+
         [HttpPost("post_jump")]
-        public async Task<object> PostJumpToRoom(long roomId = 0, bool ddtp = false, bool changeVol = false)
+        public async Task<object> PostJumpToRoom(long roomId = 0, bool ddtp = false, bool changeVol = false, decimal vol = 0.1m, bool reload = false)
         {
             await RedisHelper.SetAsync("ddtp", ddtp ? 1 : 0);
             if (roomId > 0)
@@ -236,7 +246,7 @@ namespace web.Controllers
                 tpRoomList.Add(jumpRoom);
                 RedisHelper.Set("jroom", jumpRoom);
                 RedisHelper.Del("jroomdone");
-                ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "common", data = ImClient.jumpToRoom(jumpRoom, changeVol).encodeJs()}));
+                ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "common", data = ImClient.jumpToRoom(jumpRoom, changeVol, vol, reload).encodeJs()}));
             }
             return new
             {

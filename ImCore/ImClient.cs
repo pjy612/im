@@ -197,7 +197,7 @@ if(volume==0){
 if(location.href.match(/(\d+)/) && location.href.match(/(\d+)/)[1]==21438956){
 location.reload();
 }else{
-location.href='https://live.bilibili.com/21438956';
+location.replace('https://live.bilibili.com/21438956');
 }
     }
 }
@@ -214,8 +214,15 @@ try
 if(location.href.match(/(\d+)/) && location.href.match(/(\d+)/)[1]==21438956){
 location.reload();
 }else{
-location.href='https://live.bilibili.com/21438956';
+location.replace('https://live.bilibili.com/21438956');
 }
+}
+catch(e){ }";
+
+    public const string flushPage = @"
+try
+{
+location.reload();
 }
 catch(e){ }";
 
@@ -225,7 +232,7 @@ try
 if(location.href.match(/(\d+)/) && location.href.match(/(\d+)/)[1]==21438956){
 location.reload();
 }else{
-location.href='https://live.bilibili.com/21438956';
+location.replace('https://live.bilibili.com/21438956');
 }
 }
 catch(e){ }";
@@ -241,20 +248,54 @@ try
 catch(e){{ }}";
     }
 
-    public static string jumpToRoom(long roomId, bool changeVol = false,decimal vol = 0.1m)
-    {   
+    public static string jumpToRoom(long roomId, bool changeVol = false, decimal vol = 0.1m, bool forceReload = false)
+    {
         return $@"
 try
 {{    
     localStorage.setItem('LIVE_PLAYER_STATUS',JSON.stringify({{type:'html5',timeStamp:ts_ms()}}));
     if(location.href.match(/(\d+)/) && location.href.match(/(\d+)/)[1]=='{roomId}'){{
-        livePlayer.reload();
+        {(changeVol ?
+            @"localStorage.setItem('videoVolume', " + vol + @");" :
+            @"")}
+        {(forceReload ? "location.reload();" : "livePlayer.reload();")}
     }}else{{
         {(changeVol ?
-            @"localStorage.setItem('videoVolume', "+ vol + @");" :
+            @"localStorage.setItem('videoVolume', " + vol + @");" :
             @"if(volume>=0.5){localStorage.setItem('videoVolume', 0.1);}")}
-        location.href = 'https://live.bilibili.com/{roomId}';
+        location.replace('https://live.bilibili.com/{roomId}');
     }}
+}}
+catch(e){{ }}";
+    }
+
+    public static string dmStorm(string msg, string roomId = "", bool force = false)
+    {
+        return $@"
+try
+{{    
+    {(force ? "" : "if (CONFIG && !CONFIG.DD_DM_STORM) return; ")}
+    function sendDm(msg,roomid = 0){{
+        if (!roomid)
+        {{
+           roomid = BilibiliLive.ROOMID;
+        }}
+        BiliPushUtils.ajaxWithCommonArgs({{
+            method: 'POST',
+            url: 'msg/send',
+            data: {{
+                color: 16777215,
+                fontsize:25,
+                mode:1,
+                msg:msg,
+                roomid:roomid,
+                bubble:0,
+                rnd:Math.round(new Date().valueOf() /1000),
+            }}
+            ,roomid:roomid
+        }});
+    }}
+    sendDm('{msg}','{roomId}');
 }}
 catch(e){{ }}";
     }

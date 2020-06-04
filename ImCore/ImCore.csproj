@@ -24,6 +24,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="ImClient.cs~RF5095395.TMP" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CSRedisCore" Version="3.6.2" />
     <PackageReference Include="FreeSql.All" Version="1.4.0" />
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
