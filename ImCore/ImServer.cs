@@ -97,6 +97,11 @@ class ImServer : ImClient
         _server = options.Server;
         new TimerX(async state =>
         {
+            _clients.Where(r => r.Value.connetcDateTime.AddSeconds(30) < DateTime.Now && r.Value.clientMetaData.realUid == 0).AsParallel().ForAll(r =>
+            {
+                r.Value.socket.Abort();
+                _clients.TryRemove(r.Key, out var x);
+            });
             long canEnterRoom = await _redis.GetAsync<long>("jroom");
             Dictionary<long, int> roomUserCount = _clients.Where(r => r.Value.clientMetaData.roomid > 0)
                 .Select(r => r.Value.clientMetaData.roomid)
@@ -105,27 +110,45 @@ class ImServer : ImClient
             int trueRoom = roomUserCount.Values.Sum();
             string roomCountStr = roomUserCount.Select(r => new
             {
-                Key   = r.Key,
+                Key = r.Key,
                 Value = r.Value,
-                o     = (r.Key == 21438956 ? 0 : r.Key)
+                o = (r.Key == 21438956 ? 0 : r.Key)
             }).OrderBy(k => k.o).Select(r => $"{r.Key}:{r.Value}").Join("|");
+
             Console.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} 当前客户数：{_clients.Count},指定房间：{trueRoom},其他房间：{_clients.Count - trueRoom},房间详情：{roomCountStr}");
-        }, null, 1000, 5000) {Async = true};
-//        new TimerX(state =>
-//        {
-//            var message = new Message()
-//            {
-//                type = "pong"
-//            };
-//            //Console.WriteLine("心跳反馈");
-//            _clients.AsParallel().ForAll(async client => { await SendStringAsync(client.Value.socket, message); });
-//            //Console.WriteLine("心跳结束");
-//        }, null, 1_000, 60_000);
+            if (_offlineClients.Any())
+            {
+                Console.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} 维护期用户数:{_offlineClients.Count}");
+            }
+        }, null, 1000, 5000)
+        { Async = true };
+        //        new TimerX(state =>
+        //        {
+        //            var message = new Message()
+        //            {
+        //                type = "pong"
+        //            };
+        //            //Console.WriteLine("心跳反馈");
+        //            _clients.AsParallel().ForAll(async client => { await SendStringAsync(client.Value.socket, message); });
+        //            //Console.WriteLine("心跳结束");
+        //        }, null, 1_000, 60_000);
         new TimerX(async state =>
         {
             blackIps.Clear();
             await _redis.DelAsync("preBlack", "blacklist");
         }, null, 100, 10 * 60_000);
+        new TimerX(state =>
+       {
+           _clients.AsParallel().ForAll(async r =>
+           {
+               bool inblack = await _redis.SIsMemberAsync("bpblack", r.Value.clientMetaData.Ip);
+               if (inblack)
+               {
+                   r.Value.socket.Abort();
+                   _clients.TryRemove(r.Key, out var x);
+               }
+           });
+       }, null, 100, 10_000);
         new TimerX(async state =>
         {
             string[] keys = (await scanAllKeysAsync("heart:error:*")).ToArray();
@@ -153,7 +176,6 @@ class ImServer : ImClient
                     foreach (Action action in ProcessCollection.GetConsumingEnumerable())
                     {
                         await Task.Run(action);
-                        await Task.Delay(100);
                     }
                 }
                 catch (Exception e)
@@ -183,6 +205,7 @@ class ImServer : ImClient
                                 var roomIds = list.Select(r => r.Replace("RR:", "").ToLong()).Distinct().ToList();
                                 if (roomIds.Any())
                                 {
+                                    Console.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} 发送补漏消息 客户[{hashClients.Count}] 礼物数[{roomIds.Count}]");
                                     string encodeJs = giftJs(roomIds).encodeJs();
                                     Message message = new Message()
                                     {
@@ -217,7 +240,7 @@ class ImServer : ImClient
                         string[] strings = _clients.Values.OrderBy(r => r.clientMetaData.version).ThenBy(r => r.clientMetaData.Ip).ThenBy(r => r.clientMetaData.uid).Select(r =>
                         {
                             ImClientInfo client = r.clientMetaData;
-                            return $"脚本版本：{client.version},心跳检测：{r.heartChecked},心跳成功：{r.heartSuccess},用户信息检测：{r.userChecked},请求Uid：{client.uid},回调Uid：{client.realUid},用户名：{client.uname},所在房间：{client.roomid},用户Ip：{client.Ip}";
+                            return $"脚本版本：{client.version},心跳检测：{r.heartChecked},心跳成功：{r.heartSuccess},用户信息检测：{r.userChecked},风暴开关：{r.storm},请求Uid：{client.uid},回调Uid：{client.realUid},用户名：{client.uname},所在房间：{client.roomid},用户Ip：{client.Ip}";
                         }).ToArray();
                         File.WriteAllLines("onlineUsers.txt", strings);
                     }
@@ -274,10 +297,25 @@ class ImServer : ImClient
                             string[] strings = client.Select(r => r.Value).OrderBy(r => r.clientMetaData.version).ThenBy(r => r.clientMetaData.Ip).ThenBy(r => r.clientMetaData.uid).Select(r =>
                             {
                                 ImClientInfo clientInfo = r.clientMetaData;
-                                return $"脚本版本：{clientInfo.version},心跳检测：{r.heartChecked},心跳成功：{r.heartSuccess},用户信息检测：{r.userChecked},请求Uid：{clientInfo.uid},回调Uid：{clientInfo.realUid},用户名：{clientInfo.uname},所在房间：{clientInfo.roomid},用户Ip：{clientInfo.Ip}";
+                                return $"脚本版本：{clientInfo.version},心跳检测：{r.heartChecked},心跳成功：{r.heartSuccess},用户信息检测：{r.userChecked},风暴开关：{r.storm},请求Uid：{clientInfo.uid},回调Uid：{clientInfo.realUid},用户名：{clientInfo.uname},所在房间：{clientInfo.roomid},用户Ip：{clientInfo.Ip}";
                             }).ToArray();
                             File.WriteAllLines("blackUsers.txt", strings);
                         }
+                    }
+                    catch (Exception e)
+                    {
+                        XTrace.WriteException(e);
+                    }
+                }
+                else if (code == "44")
+                {
+                    try
+                    {
+                        _clients.Where(r => r.Value.connetcDateTime.AddSeconds(20) < DateTime.Now && r.Value.clientMetaData.realUid == 0).AsParallel().ForAll(r =>
+                        {
+                            r.Value.socket.Abort();
+                            _clients.TryRemove(r.Key, out var x);
+                        });
                     }
                     catch (Exception e)
                     {
@@ -301,7 +339,7 @@ class ImServer : ImClient
                                     {
                                         long canEnterRoom = _redis.Get<long>("jroom");
                                         KeyValuePair<Guid, ImServerClient>[] client = _clients.Where(r => r.Value.clientMetaData.roomid > 0
-                                         && r.Value.clientMetaData.roomid                                                               != canEnterRoom && r.Value.clientMetaData.roomid != 21438956
+                                         && r.Value.clientMetaData.roomid != canEnterRoom && r.Value.clientMetaData.roomid != 21438956
                                         ).ToArray();
                                         if (client.Any())
                                         {
@@ -324,13 +362,36 @@ class ImServer : ImClient
                         XTrace.WriteException(e);
                     }
                 }
+                else if (code == "on")
+                {
+                    if (_offlineClients.Any())
+                    {
+                        _offlineClients.AsParallel().ForAll(keyValuePair =>
+                        {
+                            keyValuePair.Value.socket.Abort();
+                            _offlineClients.TryRemove(keyValuePair.Key, out var old);
+                        });
+                    }
+                }
+                else if (code == "off")
+                {
+                    if (_offlineClients.Any())
+                    {
+                        string[] strings = _offlineClients.Values.OrderBy(r => r.clientMetaData.version).ThenBy(r => r.clientMetaData.Ip).ThenBy(r => r.clientMetaData.uid).Select(r =>
+                        {
+                            ImClientInfo client = r.clientMetaData;
+                            return $"脚本版本：{client.version},请求Uid：{client.uid},用户Ip：{client.Ip}";
+                        }).ToArray();
+                        File.WriteAllLines("offlineUsers.txt", strings);
+                    }
+                }
                 else if (code == "999")
                 {
                     try
                     {
                         long canEnterRoom = _redis.Get<long>("jroom");
                         KeyValuePair<Guid, ImServerClient>[] client = _clients.Where(r => r.Value.clientMetaData.roomid > 0
-                         && r.Value.clientMetaData.roomid                                                               != canEnterRoom && r.Value.clientMetaData.roomid != 21438956
+                         && r.Value.clientMetaData.roomid != canEnterRoom && r.Value.clientMetaData.roomid != 21438956
                         ).ToArray();
                         if (client.Any())
                         {
@@ -399,6 +460,7 @@ class ImServer : ImClient
 
     const int BufferSize = 4096;
     public ConcurrentDictionary<Guid, ImServerClient> _clients = new ConcurrentDictionary<Guid, ImServerClient>();
+    public ConcurrentDictionary<Guid, ImServerClient> _offlineClients = new ConcurrentDictionary<Guid, ImServerClient>();
     public BlockingCollection<Action> ProcessCollection = new BlockingCollection<Action>();
     public BlockingCollection<Action> ProcessCollectionUsers = new BlockingCollection<Action>();
     private List<long> hearErrorUids = new List<long>();
@@ -415,13 +477,17 @@ class ImServer : ImClient
         public string ticket { get; set; }
         public string wsIp { get; set; }
         public DateTime heartSuccessLimit { get; set; } = DateTime.MinValue;
+        public DateTime connetcDateTime { get; set; }
         public string heartKey { get; set; }
+        public bool storm { get; set; }
+
         public SemaphoreSlim readLock = new SemaphoreSlim(1, 1);
 
         public ImServerClient(WebSocket socket, ImClientInfo clientMetaData)
         {
-            this.socket         = socket;
+            this.socket = socket;
             this.clientMetaData = clientMetaData;
+            this.connetcDateTime = DateTime.Now;
         }
 
         protected bool Equals(ImServerClient other)
@@ -495,14 +561,14 @@ class ImServer : ImClient
                     await _redis.HDelAsync("preBlack", ip);
                 }
                 return;
-//                throw new Exception($@"
-//授权错误：用户需通过 ImHelper.PrevConnectServer 获得包含 token 的连接
-//IP:{ip},
-//origin:{origin},
-//token:{token},
-//Header:{string.Join("&", context.Request.Headers.Select(r => $"{r.Key}={r.Value}"))},
-//Param:{string.Join("&", context.Request.Query.Select(r => $"{r.Key}={r.Value}"))},
-//");
+                //                throw new Exception($@"
+                //授权错误：用户需通过 ImHelper.PrevConnectServer 获得包含 token 的连接
+                //IP:{ip},
+                //origin:{origin},
+                //token:{token},
+                //Header:{string.Join("&", context.Request.Headers.Select(r => $"{r.Key}={r.Value}"))},
+                //Param:{string.Join("&", context.Request.Query.Select(r => $"{r.Key}={r.Value}"))},
+                //");
             }
             blackIps.Remove(ip);
             await _redis.HDelAsync("preBlack", ip);
@@ -514,22 +580,53 @@ class ImServer : ImClient
 
             var cli = new ImServerClient(socket, data);
             cli.wsIp = ip;
-            var wslist = _clients.GetOrAdd(data.clientId, cli);
 
-            await SendStringAsync(socket, new Message() {type = "common", data = toastjs("当你看到这个消息时，表示魔改已连接成功", "info", 10_000).encodeJs()});
-            await SendStringAsync(socket, new Message() {type = "common", data = toastjs("魔改脚本包含恶意代码，请您慎重考虑是否使用", "error", 10_000).encodeJs()});
-//            await SendStringAsync(socket, new Message() {type = "common", data = toastjs("脚本因举报被从greasyfork下架删除", "error", 10_000).encodeJs()});
-//            await SendStringAsync(socket, new Message() {type = "common", data = toastjs("目前脚本变更至：https://github.com/pjy612/Bilibili-LRHH", "error", 10_000).encodeJs()});
-//            await SendStringAsync(socket, new Message() {type = "common", data = toastjs("长江大佬分流：https://www.mlge.xyz/uncategorized/44.html", "error", 10_000).encodeJs()});
-
-            if (cli.clientMetaData.version > limitVer)
+            if (cli.clientMetaData.version <= limitVer)
             {
+                await SendStringAsync(socket, new Message()
+                {
+                    type = "msg",
+                    data = "当前版本过低，该脚本已从GreasyFork下架。<br>如果仍要使用可前往 github 寻找更新<br>但是请注意！新脚本包含恶意代码，本人并不希望你继续使用，谢谢"
+                });
+                socket.Abort();
+                return;
+            }
+            if (_clients.Any(r => r.Value.clientMetaData.uid == data.uid && r.Value.clientMetaData.realUid == 0 && r.Value.connetcDateTime.AddMinutes(1) >= DateTime.Now))
+            {
+                await SendStringAsync(socket, new Message() { type = "common", data = toastjs("请勿重复连接...", "info", 10_000).encodeJs() });
+                socket.Abort();
+                return;
+            }
+            else
+            {
+                _clients.Where(r => r.Value.clientMetaData.uid == data.uid && r.Value.clientMetaData.realUid == 0).AsParallel().ForAll(r =>
+                {
+                    r.Value.socket.Abort();
+                    _clients.TryRemove(r.Key, out var x);
+                });
+            }
+            if (ManagerOptions.Current.AdminUids.Contains(data.uid) || ManagerOptions.Current.openClient == 1)
+            {
+                var wslist = _clients.GetOrAdd(data.clientId, cli);
+                if (!ManagerOptions.Current.AdminUids.Contains(data.uid))
+                {
+                    await SendStringAsync(socket, new Message() { type = "common", data = toastjs("当你看到这个消息时，表示魔改已连接成功", "info", 10_000).encodeJs() });
+                    await SendStringAsync(socket, new Message() { type = "common", data = toastjs("魔改脚本包含恶意代码，请您慎重考虑是否使用", "error", 10_000).encodeJs() });
+                    //            await SendStringAsync(socket, new Message() {type = "common", data = toastjs("脚本因举报被从greasyfork下架删除", "error", 10_000).encodeJs()});
+                    //            await SendStringAsync(socket, new Message() {type = "common", data = toastjs("目前脚本变更至：https://github.com/pjy612/Bilibili-LRHH", "error", 10_000).encodeJs()});
+                    //            await SendStringAsync(socket, new Message() {type = "common", data = toastjs("长江大佬分流：https://www.mlge.xyz/uncategorized/44.html", "error", 10_000).encodeJs()});
+                }
                 cli.ticket = Guid.NewGuid().ToString().Replace("-", "");
                 await SendStringAsync(socket, new Message()
                 {
                     type = "common",
                     data = postUserjs(cli.ticket).encodeJs()
                 });
+            }
+            else
+            {
+                _offlineClients.GetOrAdd(data.clientId, cli);
+                await SendStringAsync(socket, new Message() { type = "common", data = messagejs("BiLiPush维护中...").encodeJs() });
             }
             //            await Task.Run(() =>
             //            {
@@ -558,7 +655,11 @@ class ImServer : ImClient
                         {
                             break;
                         }
-                        if (socket.State != WebSocketState.Open || socket.CloseStatus.HasValue || !_clients.ContainsKey(data.clientId))
+                        if (socket.State != WebSocketState.Open || socket.CloseStatus.HasValue)
+                        {
+                            break;
+                        }
+                        if (!_clients.ContainsKey(data.clientId) && !_offlineClients.ContainsKey(data.clientId))
                         {
                             break;
                         }
@@ -605,7 +706,8 @@ class ImServer : ImClient
                 socket.Abort();
             }
             //XTrace.WriteLine($"{data.realUid},{data.uname},{data.roomid} 掉线断开，原因:[{socket.State}][{socket.CloseStatus}]{socket.CloseStatusDescription}");
-            _clients.TryRemove(data.clientId, out var oldwslist);
+            _clients.TryRemove(data.clientId, out var oldclient);
+            _offlineClients.TryRemove(data.clientId, out var oldoffclient);
             //await _redis.EvalAsync($"if redis.call('HINCRBY', KEYS[1], '{data.clientId}', '-1') <= 0 then redis.call('HDEL', KEYS[1], '{data.clientId}') end return 1",$"{_redisPrefix}Online");
             //LeaveChan(data.clientId, GetChanListByClientId(data.clientId));
             //await SyncOnlineData();
@@ -648,46 +750,46 @@ class ImServer : ImClient
                     {
                         #region 心跳检测
 
-//                        string heartdata = client.heartKey;
-//                        if (heartdata.IsNullOrWhiteSpace()) return 1;
-//                        long heartErrorCount = await _redis.GetAsync<long>($"heart:error:{client.clientMetaData.realUid}");
-//                        if (heartErrorCount >= 5)
-//                        {
-//                            client.heartSuccess = false;
-//                            await SendStringAsync(socket, new Message() { type = "common", data = toastjs("检测到异常推送已关闭", "error", 5_000).encodeJs() });
-//                            if (!heartErrorUids.Contains(client.clientMetaData.realUid))
-//                            {
-//                                heartErrorUids.Add(client.clientMetaData.realUid);
-//                                TimerX.Delay(async state =>
-//                                {
-//                                    heartErrorUids.Remove(client.clientMetaData.realUid);
-//                                    await _redis.EvalAsync($"if redis.call('INCRBY', KEYS[1], '-1') <= 0 then redis.call('DEL', KEYS[1]) end return 1", $"heart:error:{client.clientMetaData.realUid}");
-//                                }, 60000);
-//                            }
-//                            return 1;
-//                        }
-//                        if (message.data != heartdata)
-//                        {
-//                            client.heartSuccess = false;
-//                            await SendStringAsync(socket, new Message() { type = "common", data = toastjs("检测到异常推送已关闭", "error", 5_000).encodeJs() });
-//                            await _redis.IncrByAsync($"heart:error:{client.clientMetaData.realUid}");
-//                        }
-//                        else
-//                        {
-//                            client.heartSuccess = true;
-//                            //client.heartSuccessLimit = DateTime.Now.AddMinutes(2);
-//                            await _redis.EvalAsync($"if redis.call('INCRBY', KEYS[1], '-1') <= 0 then redis.call('DEL', KEYS[1]) end return 1", $"heart:error:{client.clientMetaData.realUid}");
-//                        }
-//                        //                        client.heartKey = $"{random.Next(999999)}";
-//                        //                        await SendStringAsync(socket, new Message()
-//                        //                        {
-//                        //                            type = "common",
-//                        //                            data = heartjs(client.heartKey).encodeJs()
-//                        //                        });
+                        //                        string heartdata = client.heartKey;
+                        //                        if (heartdata.IsNullOrWhiteSpace()) return 1;
+                        //                        long heartErrorCount = await _redis.GetAsync<long>($"heart:error:{client.clientMetaData.realUid}");
+                        //                        if (heartErrorCount >= 5)
+                        //                        {
+                        //                            client.heartSuccess = false;
+                        //                            await SendStringAsync(socket, new Message() { type = "common", data = toastjs("检测到异常推送已关闭", "error", 5_000).encodeJs() });
+                        //                            if (!heartErrorUids.Contains(client.clientMetaData.realUid))
+                        //                            {
+                        //                                heartErrorUids.Add(client.clientMetaData.realUid);
+                        //                                TimerX.Delay(async state =>
+                        //                                {
+                        //                                    heartErrorUids.Remove(client.clientMetaData.realUid);
+                        //                                    await _redis.EvalAsync($"if redis.call('INCRBY', KEYS[1], '-1') <= 0 then redis.call('DEL', KEYS[1]) end return 1", $"heart:error:{client.clientMetaData.realUid}");
+                        //                                }, 60000);
+                        //                            }
+                        //                            return 1;
+                        //                        }
+                        //                        if (message.data != heartdata)
+                        //                        {
+                        //                            client.heartSuccess = false;
+                        //                            await SendStringAsync(socket, new Message() { type = "common", data = toastjs("检测到异常推送已关闭", "error", 5_000).encodeJs() });
+                        //                            await _redis.IncrByAsync($"heart:error:{client.clientMetaData.realUid}");
+                        //                        }
+                        //                        else
+                        //                        {
+                        //                            client.heartSuccess = true;
+                        //                            //client.heartSuccessLimit = DateTime.Now.AddMinutes(2);
+                        //                            await _redis.EvalAsync($"if redis.call('INCRBY', KEYS[1], '-1') <= 0 then redis.call('DEL', KEYS[1]) end return 1", $"heart:error:{client.clientMetaData.realUid}");
+                        //                        }
+                        //                        //                        client.heartKey = $"{random.Next(999999)}";
+                        //                        //                        await SendStringAsync(socket, new Message()
+                        //                        //                        {
+                        //                        //                            type = "common",
+                        //                        //                            data = heartjs(client.heartKey).encodeJs()
+                        //                        //                        });
 
                         #endregion
                     }
-                    else if (message.type == "userInfo")
+                    else if (message.type == "user_check")
                     {
                         try
                         {
@@ -697,21 +799,22 @@ class ImServer : ImClient
                             long uid = (messageData?.Value<long?>("uid")).ToLong();
                             long roomid = (messageData?.Value<long?>("roomid")).ToLong();
                             string uname = (messageData?.Value<string>("uname"));
-//                            long extUid = (extData?.Value<long?>("uid")).ToLong();
-//                            long extRoomId = (extData?.Value<long?>("roomid")).ToLong();
+                            bool storm = (messageData?.Value<bool>("storm")) ?? false;
+                            //                            long extUid = (extData?.Value<long?>("uid")).ToLong();
+                            //                            long extRoomId = (extData?.Value<long?>("roomid")).ToLong();
                             if (uid != client.clientMetaData.uid)
                             {
-//                                if (!ManagerOptions.Current.AdminUids.Contains(uid))
-//                                {
-//                                    if (!ManagerOptions.Current.BadUids.Contains(uid))
-//                                    {
-//                                        ManagerOptions.Current.BadUids.Add(uid);
-//                                        ManagerOptions.Current.SaveAsync();
-//                                    }
-//                                }
+                                //                                if (!ManagerOptions.Current.AdminUids.Contains(uid))
+                                //                                {
+                                //                                    if (!ManagerOptions.Current.BadUids.Contains(uid))
+                                //                                    {
+                                //                                        ManagerOptions.Current.BadUids.Add(uid);
+                                //                                        ManagerOptions.Current.SaveAsync();
+                                //                                    }
+                                //                                }
                                 //XTrace.WriteLine($"回调疑似伪造:client:{client.clientMetaData.uid},req:{uid},{msg}");
-//                                await _redis.SAddAsync("blacklist", client.clientMetaData.Ip);
-                                await SendStringAsync(socket, new Message() {type = "common", data = flushPage.encodeJs()});
+                                //                                await _redis.SAddAsync("blacklist", client.clientMetaData.Ip);
+                                await SendStringAsync(socket, new Message() { type = "common", data = flushPage.encodeJs() });
                                 return 1;
                             }
                             if (roomid > 0)
@@ -724,61 +827,64 @@ class ImServer : ImClient
                             }
                             if (uid == 0)
                             {
-                                await SendStringAsync(socket, new Message() {type = "common", data = flushPage.encodeJs()});
-                                await SendStringAsync(socket, new Message() {type = "common", data = toastjs("检测到异常推送已关闭", "error", 5_000).encodeJs()});
+                                await SendStringAsync(socket, new Message() { type = "common", data = flushPage.encodeJs() });
+                                await SendStringAsync(socket, new Message() { type = "common", data = toastjs("检测到异常推送已关闭", "error", 5_000).encodeJs() });
                                 return 1;
                             }
                             if (JsonConfig<ManagerOptions>.Current.BlackUids?.Contains(uid) == true)
                             {
-                                await SendStringAsync(socket, new Message() {type = "common", data = flushPage.encodeJs()});
-                                await SendStringAsync(socket, new Message() {type = "common", data = toastjs("检测到异常推送已关闭", "error", 5_000).encodeJs()});
+                                await SendStringAsync(socket, new Message() { type = "common", data = flushPage.encodeJs() });
+                                await SendStringAsync(socket, new Message() { type = "common", data = toastjs("检测到异常推送已关闭", "error", 5_000).encodeJs() });
                                 return 1;
                             }
-                            if (uid == client.clientMetaData.uid && client.clientMetaData.uid == uid)
+                            if (uid == client.clientMetaData.uid)
                             {
                                 client.clientMetaData.realUid = uid;
-                                long canEnterRoom = await _redis.GetAsync<long>("jroom");
-                                if (!(roomid == 21438956 || (canEnterRoom > 0 && roomid == canEnterRoom)))
+                                client.storm = storm;
+                                if (ManagerOptions.Current.jroom == 1)
                                 {
-                                    //string roomIds = new List<long>() {21438956, canEnterRoom}.Distinct().ToList().Join();
-                                    //await SendStringAsync(socket, new Message() {type = "common", data = toastjs($"bilipush仅支持直播间{roomIds}", "error", 5_000).encodeJs()});
-                                    await SendStringAsync(socket, new Message() {type = "common", data = jumpToRoom(21438956).encodeJs()});
-                                    client.userChecked = false;
-                                    return 1;
-                                }
-                                else
-                                {
-                                    int ddtp = await _redis.GetAsync<int>("ddtp");
-                                    if (ddtp == 1)
+                                    long canEnterRoom = await _redis.GetAsync<long>("jroom");
+                                    if (!(roomid == 21438956 || (canEnterRoom > 0 && roomid == canEnterRoom)))
                                     {
-                                        if (roomid != canEnterRoom && canEnterRoom > 0)
-                                        {
-                                            await SendStringAsync(socket, new Message() {type = "common", data = toastjs($"DD传送门已启动，准备进行折跃...", "info", 5_000).encodeJs()});
-                                            await Task.Delay(2000);
-                                            await SendStringAsync(socket, new Message() {type = "common", data = jumpToRoom(canEnterRoom).encodeJs()});
-                                        }
+                                        //string roomIds = new List<long>() {21438956, canEnterRoom}.Distinct().ToList().Join();
+                                        //await SendStringAsync(socket, new Message() {type = "common", data = toastjs($"bilipush仅支持直播间{roomIds}", "error", 5_000).encodeJs()});
+                                        await SendStringAsync(socket, new Message() { type = "common", data = jumpToRoom(21438956).encodeJs() });
+                                        client.userChecked = false;
                                         return 1;
                                     }
                                     else
                                     {
-                                        if (roomid != canEnterRoom && canEnterRoom > 0)
+                                        int ddtp = await _redis.GetAsync<int>("ddtp");
+                                        if (ddtp == 1)
                                         {
-                                            if (!await _redis.SIsMemberAsync("jroomdone", uid))
+                                            if (roomid != canEnterRoom && canEnterRoom > 0)
                                             {
-                                                await SendStringAsync(socket, new Message() {type = "common", data = toastjs($"DD传送门已启动，准备进行折跃...", "info", 5_000).encodeJs()});
+                                                await SendStringAsync(socket, new Message() { type = "common", data = toastjs($"DD传送门已启动，准备进行折跃...", "info", 5_000).encodeJs() });
                                                 await Task.Delay(2000);
-                                                await SendStringAsync(socket, new Message() {type = "common", data = jumpToRoom(canEnterRoom).encodeJs()});
-                                                return 1;
+                                                await SendStringAsync(socket, new Message() { type = "common", data = jumpToRoom(canEnterRoom).encodeJs() });
                                             }
+                                            return 1;
                                         }
-                                        await _redis.SAddAsync("jroomdone", uid);
+                                        else
+                                        {
+                                            if (roomid != canEnterRoom && canEnterRoom > 0)
+                                            {
+                                                if (!await _redis.SIsMemberAsync("jroomdone", uid))
+                                                {
+                                                    await SendStringAsync(socket, new Message() { type = "common", data = toastjs($"DD传送门已启动，准备进行折跃...", "info", 5_000).encodeJs() });
+                                                    await Task.Delay(2000);
+                                                    await SendStringAsync(socket, new Message() { type = "common", data = jumpToRoom(canEnterRoom).encodeJs() });
+                                                    return 1;
+                                                }
+                                            }
+                                            await _redis.SAddAsync("jroomdone", uid);
+                                        }
+                                    }
+                                    if (roomid == canEnterRoom && roomid != 21438956)
+                                    {
+                                        await SendStringAsync(socket, new Message() { type = "common", data = toastjs("欢迎体验DD传送门...", "info", 10_000).encodeJs() });
                                     }
                                 }
-                                if (roomid == canEnterRoom && roomid != 21438956)
-                                {
-                                    await SendStringAsync(socket, new Message() {type = "common", data = toastjs("欢迎体验DD传送门...", "info", 10_000).encodeJs()});
-                                }
-                                client.userChecked = client.heartSuccess = true;
                                 //                                if (JsonConfig<ManagerOptions>.Current.AdminUids?.Contains(uid) != true)
                                 //                                {
                                 //                                    //踢掉其他人
@@ -799,9 +905,10 @@ class ImServer : ImClient
                                 //                                }
                                 if (ManagerOptions.Current.BlackUids?.Contains(client.clientMetaData.realUid) == true)
                                 {
-                                    await SendStringAsync(socket, new Message() {type = "common", data = toastjs("检测到异常推送已关闭", "error", 5_000).encodeJs()});
+                                    await SendStringAsync(socket, new Message() { type = "common", data = toastjs("检测到异常推送已关闭", "error", 5_000).encodeJs() });
                                     return 1;
                                 }
+                                client.userChecked = client.heartSuccess = true;
                                 bool checkLost = false;
                                 if (ManagerOptions.Current.AdminUids.Contains(client.clientMetaData.realUid))
                                 {
@@ -835,40 +942,40 @@ class ImServer : ImClient
                                 {
                                     if (!CheckLostClients.Contains(client))
                                         CheckLostClients.Enqueue(client);
-//                                    ProcessCollectionUsers.Add(async () =>
-//                                    {
-//                                        List<string> list = await keysAsync("RR:*");
-//                                        if (list.Any())
-//                                        {
-//                                            var roomIds = list.Select(r => r.Replace("RR:", "").ToLong()).Distinct().ToList();
-//                                            await SendStringAsync(socket, new Message()
-//                                            {
-//                                                type = "common",
-//                                                data = giftJs(roomIds).encodeJs()
-//                                            });
-//                                        }
-//                                    });
+                                    //                                    ProcessCollectionUsers.Add(async () =>
+                                    //                                    {
+                                    //                                        List<string> list = await keysAsync("RR:*");
+                                    //                                        if (list.Any())
+                                    //                                        {
+                                    //                                            var roomIds = list.Select(r => r.Replace("RR:", "").ToLong()).Distinct().ToList();
+                                    //                                            await SendStringAsync(socket, new Message()
+                                    //                                            {
+                                    //                                                type = "common",
+                                    //                                                data = giftJs(roomIds).encodeJs()
+                                    //                                            });
+                                    //                                        }
+                                    //                                    });
                                 }
-//                                client.heartChecked = true;
-//                                if (JsonConfig<ManagerOptions>.Current.AdminUids?.Contains(uid) == true)
-//                                {
-//                                    await _redis.DelAsync($"heart:error:{client.clientMetaData.realUid}");
-//                                }
-//                                await _redis.EvalAsync($"if redis.call('INCRBY', KEYS[1], '-1') <= 0 then redis.call('DEL', KEYS[1]) end return 1", $"heart:error:{client.clientMetaData.realUid}");
-//                                string heartdata = client.heartKey;
-//                                if (heartdata.IsNullOrWhiteSpace())
-//                                {
-//                                    client.heartKey = $"{random.Next(999999)}";
-//                                }
-//                                await SendStringAsync(socket, new Message()
-//                                {
-//                                    type = "common",
-//                                    data = heartOncejs(client.heartKey).encodeJs()
-//                                });
+                                //                                client.heartChecked = true;
+                                //                                if (JsonConfig<ManagerOptions>.Current.AdminUids?.Contains(uid) == true)
+                                //                                {
+                                //                                    await _redis.DelAsync($"heart:error:{client.clientMetaData.realUid}");
+                                //                                }
+                                //                                await _redis.EvalAsync($"if redis.call('INCRBY', KEYS[1], '-1') <= 0 then redis.call('DEL', KEYS[1]) end return 1", $"heart:error:{client.clientMetaData.realUid}");
+                                //                                string heartdata = client.heartKey;
+                                //                                if (heartdata.IsNullOrWhiteSpace())
+                                //                                {
+                                //                                    client.heartKey = $"{random.Next(999999)}";
+                                //                                }
+                                //                                await SendStringAsync(socket, new Message()
+                                //                                {
+                                //                                    type = "common",
+                                //                                    data = heartOncejs(client.heartKey).encodeJs()
+                                //                                });
                             }
                             else
                             {
-                                await SendStringAsync(socket, new Message() {type = "common", data = toastjs("检测到异常推送已关闭", "error", 5_000).encodeJs()});
+                                await SendStringAsync(socket, new Message() { type = "common", data = toastjs("检测到异常推送已关闭", "error", 5_000).encodeJs() });
                                 XTrace.WriteLine($"用户UID异常回调疑似伪造:client:{client.clientMetaData.uid},req:{uid},{msg}");
                                 if (uid > 0 && !ManagerOptions.Current.AdminUids.Contains(uid))
                                 {
@@ -983,124 +1090,137 @@ class ImServer : ImClient
 
     internal void RedisSubScribleMessage(CSRedis.CSRedisClient.SubscribeMessageEventArgs e)
     {
-        ProcessCollection.Add(() =>
+        var data = JsonConvert.DeserializeObject<(Guid senderClientId, Guid[] receiveClientId, string content, bool receipt)>(e.Body);
+        Trace.WriteLine($"收到消息：{data.content}");
+        var outgoing = new ArraySegment<byte>(Encoding.UTF8.GetBytes(data.content));
+        bool publishAll = false;
+        try
         {
-            try
+            Message o = JsonConvert.DeserializeObject<Message>(JsonConvert.DeserializeObject<string>(data.content));
+            if (o.type == "raffle")
             {
-                Random random = new Random(Guid.NewGuid().GetHashCode());
-                var data = JsonConvert.DeserializeObject<(Guid senderClientId, Guid[] receiveClientId, string content, bool receipt)>(e.Body);
-                Trace.WriteLine($"收到消息：{data.content}");
-                bool publishAll = false;
+                if (o.data.raffle_type == "STORM")
+                {   
+                    data.receiveClientId = _clients.Where(r => r.Value.storm).Select(r => r.Key).ToArray();
+                    Console.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} 收到需推送 风暴消息[{data.receiveClientId.Length}]：{data.content}");
+                    Task.Run(() => { PublishMessage(data, publishAll, outgoing); });
+                    return;
+                }
+            }
+            else
+            {
+                publishAll = true;
+            }
+        }
+        catch
+        {
+        }
+        if (!data.receiveClientId.Any())
+        {
+            data.receiveClientId = _clients.Keys.ToArray();
+        }
+        Console.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}{(publishAll ? "【全服广播】" : "")}收到需推送消息 [{data.receiveClientId.Length}] ：{data.content} {(data.receipt ? "【需回执】" : "")}");
+        ProcessCollection.Add(() => { PublishMessage(data, publishAll, outgoing); });
+    }
+
+    private void PublishMessage((Guid senderClientId, Guid[] receiveClientId, string content, bool receipt) data, bool publishAll, ArraySegment<byte> outgoing)
+    {
+        try
+        {
+
+            Random random = new Random(Guid.NewGuid().GetHashCode());
+            long canEnterRoom = _redis.Get<long>("jroom");
+            data.receiveClientId.AsParallel().ForAll(async clientId =>
+            {
+                if (_clients.TryGetValue(clientId, out var client) == false)
+                {
+                    //Console.WriteLine($"websocket{clientId} 离线了，{data.content}" + (data.receipt ? "【需回执】" : ""));
+                    if (data.senderClientId != Guid.Empty && clientId != data.senderClientId && data.receipt)
+                        SendMessage(clientId, new[] { data.senderClientId }, new
+                        {
+                            data.content,
+                            receipt = "用户不在线"
+                        });
+                    return;
+                }
                 try
                 {
-                    Message o = JsonConvert.DeserializeObject<Message>(JsonConvert.DeserializeObject<string>(data.content));
-                    if (o.type != "raffle")
+                    if (publishAll)
                     {
-                        publishAll = true;
-                    }
-                }
-                catch
-                {
-                }
-                Console.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}{(publishAll ? "【全服广播】" : "")} 收到需推送消息：{data.content}" + (data.receipt ? "【需回执】" : ""));
-                var outgoing = new ArraySegment<byte>(Encoding.UTF8.GetBytes(data.content));
-                if (!data.receiveClientId.Any())
-                {
-                    data.receiveClientId = _clients.Keys.ToArray();
-                }
-                long canEnterRoom = _redis.Get<long>("jroom");
-                data.receiveClientId.AsParallel().ForAll(async clientId =>
-                {
-                    if (_clients.TryGetValue(clientId, out var client) == false)
-                    {
-                        //Console.WriteLine($"websocket{clientId} 离线了，{data.content}" + (data.receipt ? "【需回执】" : ""));
-                        if (data.senderClientId != Guid.Empty && clientId != data.senderClientId && data.receipt)
-                            SendMessage(clientId, new[] {data.senderClientId}, new
-                            {
-                                data.content,
-                                receipt = "用户不在线"
-                            });
+                        await client.socket.SendAsync(outgoing, WebSocketMessageType.Text, true, CancellationToken.None);
                         return;
                     }
-                    try
+                    if (client.clientMetaData.realUid == 0) return;
+                    if (JsonConfig<ManagerOptions>.Current.AdminUids?.Contains(client.clientMetaData.realUid) != true)
                     {
-                        if (publishAll)
+                        //没跟上队伍的才进行跳转和记录 一致的就不管了
+                        if (canEnterRoom != client.clientMetaData.roomid)
                         {
-                            await client.socket.SendAsync(outgoing, WebSocketMessageType.Text, true, CancellationToken.None);
-                            return;
-                        }
-                        if (client.clientMetaData.realUid == 0) return;
-                        if (JsonConfig<ManagerOptions>.Current.AdminUids?.Contains(client.clientMetaData.realUid) != true)
-                        {
-                            //没跟上队伍的才进行跳转和记录 一致的就不管了
-                            if (canEnterRoom != client.clientMetaData.roomid)
+                            if (!await _redis.SIsMemberAsync("jroomdone", client.clientMetaData.realUid))
                             {
-                                if (!await _redis.SIsMemberAsync("jroomdone", client.clientMetaData.realUid))
-                                {
-                                    await SendStringAsync(client.socket, new Message() {type = "common", data = toastjs("检测到您已脱离DD队伍，礼物推送停止，请自行追赶...", "info", 2000).encodeJs()});
-                                    return;
-                                }
-                            }
-                            long heartErrorCount = await _redis.GetAsync<long>($"heart:error:{client.clientMetaData.realUid}");
-                            if (heartErrorCount >= 5)
-                            {
+                                await SendStringAsync(client.socket, new Message() { type = "common", data = toastjs("检测到您已脱离DD队伍，礼物推送停止，请自行追赶...", "info", 2000).encodeJs() });
                                 return;
                             }
-                            //新版且没检测心跳 禁用
-                            //                            if (client.socket.State == WebSocketState.Open && client.heartSuccessLimit <= DateTime.Now && client.clientMetaData.version > limitVer)
-                            //                            {
-                            //                                if (client.heartSuccess)
-                            //                                {
-                            //                                    if (await _redis.ExistsAsync($"heart:lock:{client.clientMetaData.realUid}")) continue;
-                            //                                    await _redis.SetAsync($"heart:lock:{client.clientMetaData.realUid}", 0, 3, RedisExistence.Nx);
-                            //                                    await _redis.IncrByAsync($"heart:error:{client.clientMetaData.realUid}");
-                            //                                }
-                            //                                continue;
-                            //                            }
-                            //黑名单不推送
-                            if (JsonConfig<ManagerOptions>.Current.BlackUids.Contains(client.clientMetaData.realUid))
-                            {
-                                return;
-                            }
-                            if (ManagerOptions.Current.BadUids.Contains(client.clientMetaData.realUid))
-                            {
-                                if (!(random.NextDouble() <= ManagerOptions.Current.badRate))
-                                {
-                                    return;
-                                }
-                            }
-                            if (!client.userChecked || !client.heartSuccess) return;
                         }
-                        //如果接收消息人是发送者，并且接收者只有1个以下，则不发送
-                        //只有接收者为多端时，才转发消息通知其他端
-                        if (clientId == data.senderClientId) return;
-                        //关闭的不发送
-                        if (client.socket.State != WebSocketState.Open)
+                        long heartErrorCount = await _redis.GetAsync<long>($"heart:error:{client.clientMetaData.realUid}");
+                        if (heartErrorCount >= 5)
                         {
                             return;
                         }
-                        await client.socket.SendAsync(outgoing, WebSocketMessageType.Text, true, CancellationToken.None);
-                        if (data.senderClientId != Guid.Empty && clientId != data.senderClientId && data.receipt)
-                            SendMessage(clientId, new[] {data.senderClientId}, new
+                        //新版且没检测心跳 禁用
+                        //                            if (client.socket.State == WebSocketState.Open && client.heartSuccessLimit <= DateTime.Now && client.clientMetaData.version > limitVer)
+                        //                            {
+                        //                                if (client.heartSuccess)
+                        //                                {
+                        //                                    if (await _redis.ExistsAsync($"heart:lock:{client.clientMetaData.realUid}")) continue;
+                        //                                    await _redis.SetAsync($"heart:lock:{client.clientMetaData.realUid}", 0, 3, RedisExistence.Nx);
+                        //                                    await _redis.IncrByAsync($"heart:error:{client.clientMetaData.realUid}");
+                        //                                }
+                        //                                continue;
+                        //                            }
+                        //黑名单不推送
+                        if (JsonConfig<ManagerOptions>.Current.BlackUids.Contains(client.clientMetaData.realUid))
+                        {
+                            return;
+                        }
+                        if (ManagerOptions.Current.BadUids.Contains(client.clientMetaData.realUid))
+                        {
+                            if (!(random.NextDouble() <= ManagerOptions.Current.badRate))
                             {
-                                data.content,
-                                receipt = "发送成功"
-                            });
-                        await Task.Delay(10);
+                                return;
+                            }
+                        }
+                        if (!client.userChecked || !client.heartSuccess) return;
                     }
-                    catch (Exception ex)
+                    //如果接收消息人是发送者，并且接收者只有1个以下，则不发送
+                    //只有接收者为多端时，才转发消息通知其他端
+                    if (clientId == data.senderClientId) return;
+                    //关闭的不发送
+                    if (client.socket.State != WebSocketState.Open)
                     {
-                        XTrace.WriteLine($"{client.clientMetaData.realUid} 发送失败");
-                        XTrace.WriteException(ex);
+                        return;
                     }
-                });
-            }
-            catch (Exception ex)
-            {
-                XTrace.WriteLine($"订阅方法出错了：{ex.Message}");
-                XTrace.WriteException(ex);
-            }
-        });
+                    await client.socket.SendAsync(outgoing, WebSocketMessageType.Text, true, CancellationToken.None);
+                    if (data.senderClientId != Guid.Empty && clientId != data.senderClientId && data.receipt)
+                        SendMessage(clientId, new[] { data.senderClientId }, new
+                        {
+                            data.content,
+                            receipt = "发送成功"
+                        });
+                    await Task.Delay(10);
+                }
+                catch (Exception ex)
+                {
+                    XTrace.WriteLine($"{client.clientMetaData.realUid} 发送失败");
+                    XTrace.WriteException(ex);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            XTrace.WriteLine($"订阅方法出错了：{ex.Message}");
+            XTrace.WriteException(ex);
+        }
     }
 }
 
@@ -1111,7 +1231,7 @@ public class ManagerOptions : JsonConfig<ManagerOptions>
     {
         BlackUids = new List<long>();
         AdminUids = new List<long>();
-        BadUids   = new List<long>();
+        BadUids = new List<long>();
     }
 
     public List<long> BlackUids { get; set; }
@@ -1122,5 +1242,6 @@ public class ManagerOptions : JsonConfig<ManagerOptions>
     public string lastVer { get; set; } = "2.4.4.9";
     public int openClient { get; set; } = 1;
     public double breakLimit { get; set; } = 1;
+    public int jroom { get; set; } = 1;
 }
 #endif

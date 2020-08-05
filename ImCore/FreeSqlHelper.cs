@@ -72,7 +72,7 @@ namespace ImCore
                 if (bindColumn != null)
                 {
                     columnInfo.Name = bindColumn.Name;
-                    columnInfo.DbType = bindColumn.RawType;
+                    //columnInfo.DbType = bindColumn.RawType;
                     DataObjectFieldAttribute dataObjectField = info.GetCustomAttribute<DataObjectFieldAttribute>();
                     if (dataObjectField != null)
                     {

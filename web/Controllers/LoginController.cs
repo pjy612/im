@@ -20,11 +20,9 @@ namespace web.Controllers
         [HttpGet("v1/login")]
         public object Login(string username, string password)
         {
-            CSRedisClientLock csRedisClientLock = null;
+            var account = RedisHelper.Get<AccountVO>($"account:{username}");
             try
             {
-                while (null == (csRedisClientLock = RedisHelper.Lock($"login:{username}", 10))) Thread.CurrentThread.Join(3);
-                var account = RedisHelper.Get<AccountVO>($"account:{username}");
                 if (account == null)
                 {
                     var loginVo = ByPassword.LoginByPassword(username, password);
@@ -46,6 +44,7 @@ namespace web.Controllers
                     else
                     {
                         var needRefresh = true;
+
                         if (ByPassword.IsTokenAvailable(account.AccessToken))
                         {
                             if (account.Expires_AccessToken > DateTime.Now.AddDays(-1))
@@ -70,12 +69,12 @@ namespace web.Controllers
                     }
                 }
                 RedisHelper.Set($"account:{username}", account);
-                return new {code = 0, data = account};
             }
             finally
             {
-                csRedisClientLock?.Unlock();
+               
             }
+            return new { code = 0, data = account };
         }
 
 

@@ -118,13 +118,27 @@ public class ImClient
     public string postUserjs(string token)
     {
         return @"
-try{
-var getCookie=(name)=>{let arr;const reg=new RegExp(`(^|)${name}=([^;]*)(;|$)`);if((arr=document.cookie.match(reg))){return unescape(arr[2])}else{return null}};
-if(window[atob('X19MSVZFX1VTRVJfTE9HSU5fU1RBVFVTX18=')]){
-BiliPush.gsocket.send(JSON.stringify({type:'userInfo',token:'" + token + @"',
-data:Object.assign(window[atob('X19MSVZFX1VTRVJfTE9HSU5fU1RBVFVTX18=')],{roomid:location.href.match(/(\d+)/)[1]})}))
-}
-}catch(e){}";
+try {
+    API.live_user.get_info_in_room(Info.roomid).then((response) => {
+        let {
+            uid,
+            uname
+        } = response.data.info;
+        BiliPush.gsocket.send(
+            JSON.stringify({
+                type: 'user_check',
+                token: '" + token + @"',
+                data: Object.assign({
+                    uid,
+                    uname
+                }, {
+                    roomid: location.href.match(/(\d+)/)[1],
+                    storm: CONFIG.AUTO_LOTTERY_CONFIG.STORM
+                })
+            })
+        );
+    });
+} catch (e) {}";
     }
 
     public string heartjs(object val)
@@ -145,12 +159,12 @@ heartTimeout = setTimeout(()=>{
 catch(e){ }";
     }
 
-    public const string messagejs = @"
+    public string messagejs(string msg) => $@"
         try
-        {
-            window.alertdialog('魔改助手消息','{0}');
-        }
-        catch(e){ }";
+        {{
+            window.alertdialog('魔改助手消息','{msg}');
+        }}
+        catch(e){{ }}";
 
     public string toastjs(string message, string type, int ms)
     {
@@ -269,16 +283,17 @@ try
 catch(e){{ }}";
     }
 
-    public static string dmStorm(string msg, string roomId = "", bool force = false)
+    public static string dmStorm(string msg, string roomId = "",int time=5, bool force = false)
     {
         return $@"
 try
 {{    
-    {(force ? "" : "if (CONFIG && !CONFIG.DD_DM_STORM) return; ")}
+    console.log('触发DD节奏风暴[{roomId}]:{msg}');
     function sendDm(msg,roomid = 0){{
+        {(force ? "" : "if (CONFIG && !CONFIG.DD_DM_STORM){return;}")}
         if (!roomid)
         {{
-           roomid = BilibiliLive.ROOMID;
+            roomid = BilibiliLive.ROOMID;
         }}
         BiliPushUtils.ajaxWithCommonArgs({{
             method: 'POST',
@@ -295,7 +310,7 @@ try
             ,roomid:roomid
         }});
     }}
-    sendDm('{msg}','{roomId}');
+    setTimeout(()=>sendDm('{msg}','{roomId}'),parseInt(Math.random()*{time}*1e3));
 }}
 catch(e){{ }}";
     }

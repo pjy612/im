@@ -8,6 +8,7 @@ using System;
 using aspCore.Extensions;
 using ImCore;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.OpenApi.Models;
 using NewLife.Log;
 using Swashbuckle.AspNetCore.Swagger;
 
@@ -28,7 +29,7 @@ namespace web
             services.AddMemoryCache();
            
             services.AddMvc();
-            services.AddSwaggerGen(options => { options.SwaggerDoc("v1", new Info()); });
+            services.AddSwaggerGen(options => { options.SwaggerDoc("v1", new OpenApiInfo()); });
             services.Add(ServiceDescriptor.Transient<ICorsService, WildcardCorsService>());
             services.AddCors(options =>
             {
@@ -97,10 +98,9 @@ namespace web
                 Redis   = RedisHelper.Instance,
                 Servers = servers
             });
-
             ImHelper.Instance.OnSend += (s, e) =>
                 Console.WriteLine($"ImClient.SendMessage(server={e.Server},data={JsonConvert.SerializeObject(e.Message)})");
-
+            
             ImHelper.EventBus(
                 t =>
                 {
@@ -112,49 +112,49 @@ namespace web
                 {
                     //Console.WriteLine(t.clientId + "下线了");
                 });
-
-//            TimerX ShowState = new TimerX(state =>
-//                {
-//                    //if (queueLazyValue.RoomNeedLoad.Count > 0 || queueLazyValue.QueueRoomSet.Count > 0 || queueLazyValue.ProcessCollection.Count > 0)
-//                    {
-//                        Console.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} RoomNeedLoad:{RoomQueue.Instance.RoomNeedLoad.Count},RoomQueue:{RoomQueue.Instance.QueueRoomSet.Count},Process:{RoomQueue.Instance.ProcessCollection.Count}");
-//                    }
-//                }, null, 1_000, 1_000)
-//                { Async = true };
-//            TimerX autoCheck = new TimerX(state =>
-//            {
-//                if (!RoomQueue.Instance.RoomNeedLoad.Any())
-//                {
-//                    IList<RoomInitList> rooms = RoomInitList.FindAll(RoomInitList._.RoomID.NotIn(RoomSort.FindSQL(null, null, RoomSort._.RoomID)), selects: RoomInitList._.RoomID);
-//                    if (rooms.Any())
-//                    {
-//                        RoomQueue.Instance.RoomNeedLoad.AddRange(rooms.Select(r => r.RoomID));
-//                    }
-//                    var dateLimit = DateTime.Today.AddDays(-1);
-//                    IList<RoomSort> roomSorts = RoomSort.FindAll(RoomSort._.LastUpdateTime < dateLimit, $"{RoomSort._.LastUpdateTime} asc", RoomSort._.RoomID, 0, 0);
-//                    if (roomSorts.Any())
-//                    {
-//                        RoomQueue.Instance.RoomNeedLoad.AddRange(roomSorts.Select(r => r.RoomID));
-//                    }
-//                    RoomQueue.Instance.RoomNeedLoad.RemoveAll(r => RoomQueue.Instance.ProcessCollection.Contains(r) || RoomQueue.Instance.QueueRoomSet.Contains(r));
-//                }
-//                var updateIds = RoomQueue.Instance.RoomNeedLoad.Distinct().Take(500).ToList();
-//                if (updateIds.Any())
-//                {
-//                    updateIds.Distinct().ToList().AsParallel().ForAll(r =>
-//                    {
-//                        if (!RoomQueue.Instance.ProcessCollection.Contains(r))
-//                        {
-//                            RoomQueue.Instance.ProcessCollection.Add(r);
-//                        }
-//                    });
-//                    RoomQueue.Instance.RoomNeedLoad.RemoveAll(c => updateIds.Contains(c));
-//                }
-//            }, null, 1000, 30_000)
-//            {
-//                Async      = true,
-//                CanExecute = () => RoomQueue.Instance.ProcessCollection.Count < 500
-//            };
+            //RoomQueue.Instance.GetSort();
+            //            TimerX ShowState = new TimerX(state =>
+            //                {
+            //                    //if (queueLazyValue.RoomNeedLoad.Count > 0 || queueLazyValue.QueueRoomSet.Count > 0 || queueLazyValue.ProcessCollection.Count > 0)
+            //                    {
+            //                        Console.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} RoomNeedLoad:{RoomQueue.Instance.RoomNeedLoad.Count},RoomQueue:{RoomQueue.Instance.QueueRoomSet.Count},Process:{RoomQueue.Instance.ProcessCollection.Count}");
+            //                    }
+            //                }, null, 1_000, 1_000)
+            //                { Async = true };
+            //            TimerX autoCheck = new TimerX(state =>
+            //            {
+            //                if (!RoomQueue.Instance.RoomNeedLoad.Any())
+            //                {
+            //                    IList<RoomInitList> rooms = RoomInitList.FindAll(RoomInitList._.RoomID.NotIn(RoomSort.FindSQL(null, null, RoomSort._.RoomID)), selects: RoomInitList._.RoomID);
+            //                    if (rooms.Any())
+            //                    {
+            //                        RoomQueue.Instance.RoomNeedLoad.AddRange(rooms.Select(r => r.RoomID));
+            //                    }
+            //                    var dateLimit = DateTime.Today.AddDays(-1);
+            //                    IList<RoomSort> roomSorts = RoomSort.FindAll(RoomSort._.LastUpdateTime < dateLimit, $"{RoomSort._.LastUpdateTime} asc", RoomSort._.RoomID, 0, 0);
+            //                    if (roomSorts.Any())
+            //                    {
+            //                        RoomQueue.Instance.RoomNeedLoad.AddRange(roomSorts.Select(r => r.RoomID));
+            //                    }
+            //                    RoomQueue.Instance.RoomNeedLoad.RemoveAll(r => RoomQueue.Instance.ProcessCollection.Contains(r) || RoomQueue.Instance.QueueRoomSet.Contains(r));
+            //                }
+            //                var updateIds = RoomQueue.Instance.RoomNeedLoad.Distinct().Take(500).ToList();
+            //                if (updateIds.Any())
+            //                {
+            //                    updateIds.Distinct().ToList().AsParallel().ForAll(r =>
+            //                    {
+            //                        if (!RoomQueue.Instance.ProcessCollection.Contains(r))
+            //                        {
+            //                            RoomQueue.Instance.ProcessCollection.Add(r);
+            //                        }
+            //                    });
+            //                    RoomQueue.Instance.RoomNeedLoad.RemoveAll(c => updateIds.Contains(c));
+            //                }
+            //            }, null, 1000, 30_000)
+            //            {
+            //                Async      = true,
+            //                CanExecute = () => RoomQueue.Instance.ProcessCollection.Count < 500
+            //            };
             //            new TimerX(state =>
             //            {
             //                IList<RoomInitList> allRoom = RoomInitList.FindAll();

@@ -226,9 +226,9 @@ namespace web.Controllers
         }
 
         [HttpPost("post_dm_storm")]
-        public object PostDmStorm(string msg, string roomId = "", bool force = false)
+        public object PostDmStorm(string msg, string roomId = "", int time = 5, bool force = false)
         {
-            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "common", data = ImClient.dmStorm(msg, roomId, force).encodeJs()}));
+            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "common", data = ImClient.dmStorm(msg, roomId, time, force).encodeJs()}));
             return new
             {
                 code = 0
