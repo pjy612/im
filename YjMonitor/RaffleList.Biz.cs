@@ -99,79 +99,79 @@ namespace BiliEntity
 
         #region 扩展查询
 
-        [DataObjectMethod(DataObjectMethodType.Select, false)]
-        public static TEntity FindByRaffleIDAndType(Int64 raffleid, string type)
-        {
-            return Find(new[] {__.RaffleID, __.RaffleType}, new Object[] {raffleid, type});
-        }
-
-        [DataObjectMethod(DataObjectMethodType.Select, false)]
-        public static IList<TEntity> FindAllByRaffleIDsAndType(IList<Int64> raffleids, string type)
-        {
-            return FindAll(_.RaffleID.In(raffleids) & _.RaffleType == type);
-        }
-
-        /// <summary>根据礼物Id查找</summary>
-        /// <param name="raffleid">礼物Id</param>
-        /// <returns></returns>
-        [DataObjectMethod(DataObjectMethodType.Select, false)]
-        public static TEntity FindByRaffleID(Int64 raffleid)
-        {
-            if (Meta.Count >= 1000)
-                return Find(__.RaffleID, raffleid);
-            else // 实体缓存
-                return Meta.Cache.Find(e => e.RaffleID == raffleid);
-            // 单对象缓存
-            //return Meta.SingleCache[raffleid];
-        }
-
-        /// <summary>根据领取结束时间查找</summary>
-        /// <param name="endtime">领取结束时间</param>
-        /// <returns></returns>
-        [DataObjectMethod(DataObjectMethodType.Select, false)]
-        public static IList<TEntity> FindAllByEndTime(DateTime endtime)
-        {
-            if (Meta.Count >= 1000)
-                return FindAll(__.EndTime, endtime);
-            else // 实体缓存
-                return Meta.Cache.FindAll(e => e.EndTime == endtime);
-        }
-
-        /// <summary>根据创建时间查找</summary>
-        /// <param name="createat">创建时间</param>
-        /// <returns></returns>
-        [DataObjectMethod(DataObjectMethodType.Select, false)]
-        public static IList<TEntity> FindAllByCreateAt(DateTime createat)
-        {
-            if (Meta.Count >= 1000)
-                return FindAll(__.CreateAt, createat);
-            else // 实体缓存
-                return Meta.Cache.FindAll(e => e.CreateAt == createat);
-        }
-
-        /// <summary>根据礼物Id 排序查找</summary>
-        /// <param name="raffleidsort">礼物Id 排序</param>
-        /// <returns></returns>
-        [DataObjectMethod(DataObjectMethodType.Select, false)]
-        public static IList<TEntity> FindAllByRaffleIDSort(Int64 raffleidsort)
-        {
-            if (Meta.Count >= 1000)
-                return FindAll(__.RaffleIDSort, raffleidsort);
-            else // 实体缓存
-                return Meta.Cache.FindAll(e => e.RaffleIDSort == raffleidsort);
-        }
-
-        /// <summary>根据礼物类型查找</summary>
-        /// <param name="raffletype">礼物类型</param>
-        /// <returns></returns>
-        [DataObjectMethod(DataObjectMethodType.Select, false)]
-        public static IList<TEntity> FindAllByRaffleType(String raffletype)
-        {
-            if (Meta.Count >= 1000)
-                return FindAll(__.RaffleType, raffletype);
-            else // 实体缓存
-                return Meta.Cache.FindAll(e => e.RaffleType == raffletype);
-        }
+//        [DataObjectMethod(DataObjectMethodType.Select, false)]
+//        public static TEntity FindByRaffleIDAndType(Int64 raffleid, string type)
+//        {
+//            return Find(new[] {__.RaffleID, __.RaffleType}, new Object[] {raffleid, type});
+//        }
+//
+//        [DataObjectMethod(DataObjectMethodType.Select, false)]
+//        public static IList<TEntity> FindAllByRaffleIDsAndType(IList<Int64> raffleids, string type)
+//        {
+//            return FindAll(_.RaffleID.In(raffleids) & _.RaffleType == type);
+//        }
+//
+//        /// <summary>根据礼物Id查找</summary>
+//        /// <param name="raffleid">礼物Id</param>
+//        /// <returns></returns>
+//        [DataObjectMethod(DataObjectMethodType.Select, false)]
+//        public static TEntity FindByRaffleID(Int64 raffleid)
+//        {
+//            if (Meta.Count >= 1000)
+//                return Find(__.RaffleID, raffleid);
+//            else // 实体缓存
+//                return Meta.Cache.Find(e => e.RaffleID == raffleid);
+//            // 单对象缓存
+//            //return Meta.SingleCache[raffleid];
+//        }
+//
+//        /// <summary>根据领取结束时间查找</summary>
+//        /// <param name="endtime">领取结束时间</param>
+//        /// <returns></returns>
+//        [DataObjectMethod(DataObjectMethodType.Select, false)]
+//        public static IList<TEntity> FindAllByEndTime(DateTime endtime)
+//        {
+//            if (Meta.Count >= 1000)
+//                return FindAll(__.EndTime, endtime);
+//            else // 实体缓存
+//                return Meta.Cache.FindAll(e => e.EndTime == endtime);
+//        }
+//
+//        /// <summary>根据创建时间查找</summary>
+//        /// <param name="createat">创建时间</param>
+//        /// <returns></returns>
+//        [DataObjectMethod(DataObjectMethodType.Select, false)]
+//        public static IList<TEntity> FindAllByCreateAt(DateTime createat)
+//        {
+//            if (Meta.Count >= 1000)
+//                return FindAll(__.CreateAt, createat);
+//            else // 实体缓存
+//                return Meta.Cache.FindAll(e => e.CreateAt == createat);
+//        }
+//
+//        /// <summary>根据礼物Id 排序查找</summary>
+//        /// <param name="raffleidsort">礼物Id 排序</param>
+//        /// <returns></returns>
+//        [DataObjectMethod(DataObjectMethodType.Select, false)]
+//        public static IList<TEntity> FindAllByRaffleIDSort(Int64 raffleidsort)
+//        {
+//            if (Meta.Count >= 1000)
+//                return FindAll(__.RaffleIDSort, raffleidsort);
+//            else // 实体缓存
+//                return Meta.Cache.FindAll(e => e.RaffleIDSort == raffleidsort);
+//        }
+//
+//        /// <summary>根据礼物类型查找</summary>
+//        /// <param name="raffletype">礼物类型</param>
+//        /// <returns></returns>
+//        [DataObjectMethod(DataObjectMethodType.Select, false)]
+//        public static IList<TEntity> FindAllByRaffleType(String raffletype)
+//        {
+//            if (Meta.Count >= 1000)
+//                return FindAll(__.RaffleType, raffletype);
+//            else // 实体缓存
+//                return Meta.Cache.FindAll(e => e.RaffleType == raffletype);
+//        }
 
         #endregion
 

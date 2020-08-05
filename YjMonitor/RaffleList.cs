@@ -22,13 +22,13 @@ namespace BiliEntity
     public partial class RaffleList<TEntity> : IRaffleList
     {
         #region 属性
-        private Int64 _Id;
+        private Int32 _Id;
         /// <summary>礼物Id</summary>
         [DisplayName("礼物Id")]
         [Description("礼物Id")]
         [DataObjectField(true, true, false, 0)]
-        [BindColumn("id", "礼物Id", "bigint(20)")]
-        public virtual Int64 Id
+        [BindColumn("id", "礼物Id", "int(20)")]
+        public virtual Int32 Id
         {
             get { return _Id; }
             set { if (OnPropertyChanging(__.Id, value)) { _Id = value; OnPropertyChanged(__.Id); } }
@@ -174,7 +174,7 @@ namespace BiliEntity
             {
                 switch (name)
                 {
-                    case __.Id : _Id = Convert.ToInt64(value); break;
+                    case __.Id : _Id = Convert.ToInt32(value); break;
                     case __.RaffleID : _RaffleID = Convert.ToInt64(value); break;
                     case __.RaffleType : _RaffleType = Convert.ToString(value); break;
                     case __.RaffleIDSort : _RaffleIDSort = Convert.ToInt64(value); break;
@@ -269,7 +269,7 @@ namespace BiliEntity
     {
         #region 属性
         /// <summary>礼物Id</summary>
-        Int64 Id { get; set; }
+        Int32 Id { get; set; }
 
         /// <summary>礼物Id</summary>
         Int64 RaffleID { get; set; }

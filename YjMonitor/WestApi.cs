@@ -81,6 +81,28 @@ namespace YjMonitorNet
             return new List<StormGiftDTO>();
         }
         //pkLottery
+        public static List<PKGiftDTO> GetPkLottery()
+        {
+            RestRequest request = new RestRequest("bilibili/pkLottery/v1/getList");
+            request.AddQueryParameter(nameof(authName), authName);
+            request.AddQueryParameter(nameof(accessKey), accessKey);
+            try
+            {
+                var execute = _client.Execute<HttpRspDTO<List<PKGiftDTO>>>(request);
+                if (execute.StatusCode == HttpStatusCode.OK)
+                {
+                    if (execute.Data.Code == 0)
+                    {
+                        return execute.Data.Data;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                XTrace.WriteException(e);
+            }
+            return new List<PKGiftDTO>();
+        }
     }
 
     public class HttpRspDTO<T>
@@ -200,9 +222,47 @@ namespace YjMonitorNet
 
     }
 
+    public class PKGiftDTO
+    {
+        /// <summary>
+        /// Examples: 2135021
+        /// </summary>
+        [JsonProperty("Id")]
+        public long Id { get; set; }
+
+        /// <summary>
+        /// Examples: 11437906
+        /// </summary>
+        [JsonProperty("RoomId")]
+        public long RoomId { get; set; }
+
+        /// <summary>
+        /// Examples: "小萝卜嘎嘣脆"
+        /// </summary>
+        [JsonProperty("MasterName")]
+        public string MasterName { get; set; }
+
+        /// <summary>
+        /// Examples: 302118485
+        /// </summary>
+        [JsonProperty("MasterId")]
+        public long MasterId { get; set; }
+
+        /// <summary>
+        /// Examples: 1583212952
+        /// </summary>
+        [JsonProperty("Time")]
+        public long Time { get; set; }
+
+        /// <summary>
+        /// Examples: 1583214152
+        /// </summary>
+        [JsonProperty("EndTime")]
+        public long EndTime { get; set; }
+    }
+
     public class GuardGiftDTO
     {
-
         /// <summary>
         /// Examples: 2135021
         /// </summary>
@@ -256,7 +316,5 @@ namespace YjMonitorNet
         /// </summary>
         [JsonProperty("Type")]
         public long Type { get; set; }
-
-
     }
 }

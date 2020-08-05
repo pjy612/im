@@ -2,16 +2,17 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <TargetFramework>netcoreapp2.2</TargetFramework>
     <AutoGenerateBindingRedirects>False</AutoGenerateBindingRedirects>
   </PropertyGroup>
 
   <ItemGroup>
     <None Remove="Program.cs~RFb6cc07c.TMP" />
+    <None Remove="Program.cs~RFd804be4.TMP" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="RestSharp" Version="106.6.10" />
+    <PackageReference Include="RestSharp" Version="106.11.4" />
   </ItemGroup>
 
   <ItemGroup>
@@ -22,6 +23,7 @@
   <ItemGroup>
     <Reference Include="XCode">
       <HintPath>..\..\..\NewLifeX\Bin\netstandard2.0\XCode.dll</HintPath>
+      <Private>true</Private>
     </Reference>
   </ItemGroup>
 

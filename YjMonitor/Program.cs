@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
+using System.Data.SQLite;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -13,6 +14,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using BiliEntity;
 using CSRedis;
+using FreeSql;
+using ImCore;
 using NewLife;
 using NewLife.Data;
 using NewLife.Json;
@@ -41,6 +44,25 @@ namespace YjMonitor
         public double Rand { get; set; } = 0.8;
     }
 
+    public class FixedQueue<T> : ConcurrentQueue<T>
+    {
+        public int limit { get; set; }
+
+        public FixedQueue(int limit)
+        {
+            this.limit = limit;
+        }
+
+        public new bool Enqueue(T item)
+        {
+            if (this.Contains(item)) return false;
+            base.Enqueue(item);
+            if (Count > limit)
+                this.TryDequeue(out var tmp);
+            return true;
+        }
+    }
+
     class Program
     {
         static string data = new
@@ -51,115 +73,125 @@ namespace YjMonitor
             }
         }.ToJson();
 
-        public class FixedQueue<T> : ConcurrentQueue<T>
-        {
-            public int limit { get; set; }
-
-            public FixedQueue(int limit)
-            {
-                this.limit = limit;
-            }
-
-            public new bool Enqueue(T item)
-            {
-                if (this.Contains(item)) return false;
-                base.Enqueue(item);
-                if (Count > limit)
-                    this.TryDequeue(out var tmp);
-                return true;
-            }
-        }
-
         private static void PollWestApi()
         {
             XTrace.WriteLine("POST WestApi Start");
             List<StormGiftDTO> stormGiftDtos = WestApi.GetStorm();
             List<TvGiftDTO> tvGiftDtos = WestApi.GetTv();
             List<GuardGiftDTO> guardGiftDtos = WestApi.GetGuard();
-            RaffleList.Meta.ProcessWithSplit(RaffleList.Meta.ConnName, $"{RaffleList.Meta.TableName}_west", () =>
+            List<PKGiftDTO> pkGiftDtos = WestApi.GetPkLottery();
+
+            List<RaffleList> list = new List<RaffleList>();
+            if (stormGiftDtos.Any())
             {
-                List<RaffleList> list = new List<RaffleList>();
+                List<long> ids = stormGiftDtos.Select(r => r.Id).ToList();
+
+                IList<RaffleList> entitys = FindAllByRaffleIDsAndType(ids, "STORM", "_west");
+                stormGiftDtos = stormGiftDtos.Where(r => entitys.All(c => c.RaffleID != r.Id)).ToList();
                 if (stormGiftDtos.Any())
                 {
-                    List<long> ids = stormGiftDtos.Select(r => r.Id).ToList();
-
-                    IList<RaffleList> entitys = RaffleList.FindAllByRaffleIDsAndType(ids, "STORM");
-
-                    stormGiftDtos = stormGiftDtos.Where(r => entitys.All(c => c.RaffleID != r.Id)).ToList();
-                    if (stormGiftDtos.Any())
+                    var tmp = stormGiftDtos.AsParallel().Select(item =>
                     {
-                        var tmp = stormGiftDtos.AsParallel().Select(item =>
-                        {
-                            var raffle = new RaffleList();
-                            raffle.RaffleID     = item.Id;
-                            raffle.RaffleIDSort = item.Id / 1000000;
-                            raffle.RoomID       = item.RoomId;
-                            raffle.RaffleType   = "STORM";
-                            raffle.EndTime      = ToLocal(item.Time + 60);
-                            raffle.Data         = JsonConvert.SerializeObject(item);
-                            raffle.CreateAt     = ToLocal(item.Time);
-                            return raffle;
-                        }).ToList();
-                        list.AddRange(tmp);
-                    }
+                        var raffle = new RaffleList() {TvType = "", GuardType = ""};
+                        raffle.RaffleID     = item.Id;
+                        raffle.RaffleIDSort = item.Id / 1000000;
+                        raffle.RoomID       = item.RoomId;
+                        raffle.RaffleType   = "STORM";
+                        raffle.EndTime      = ToLocal(item.Time + 60);
+                        raffle.Data         = JsonConvert.SerializeObject(item);
+                        raffle.CreateAt     = ToLocal(item.Time);
+                        return raffle;
+                    }).ToList();
+                    list.AddRange(tmp);
                 }
+            }
+            if (guardGiftDtos.Any())
+            {
+                List<long> ids = guardGiftDtos.Select(r => r.Id).ToList();
+
+                IList<RaffleList> entitys = FindAllByRaffleIDsAndType(ids, "GUARD", "_west");
+                guardGiftDtos = guardGiftDtos.Where(r => entitys.All(c => c.RaffleID != r.Id)).ToList();
                 if (guardGiftDtos.Any())
                 {
-                    List<long> ids = guardGiftDtos.Select(r => r.Id).ToList();
-
-                    IList<RaffleList> entitys = RaffleList.FindAllByRaffleIDsAndType(ids, "GUARD");
-                    guardGiftDtos = guardGiftDtos.Where(r => entitys.All(c => c.RaffleID != r.Id)).ToList();
-                    if (guardGiftDtos.Any())
+                    var tmp = guardGiftDtos.AsParallel().Select(item =>
                     {
-                        var tmp = guardGiftDtos.AsParallel().Select(item =>
-                        {
-                            var raffle = new RaffleList();
-                            raffle.RaffleID   = raffle.RaffleIDSort = item.Id;
-                            raffle.RoomID     = item.RoomId;
-                            raffle.RaffleType = "GUARD";
-                            raffle.EndTime    = ToLocal(item.EndTime);
-                            raffle.GuardType  = $"{item.Type}";
-                            raffle.Data       = JsonConvert.SerializeObject(item);
-                            raffle.CreateAt   = ToLocal(item.Time);
-                            return raffle;
-                        }).ToList();
-                        list.AddRange(tmp);
-                    }
+                        var raffle = new RaffleList() {TvType = "", GuardType = ""};
+                        raffle.RaffleID   = raffle.RaffleIDSort = item.Id;
+                        raffle.RoomID     = item.RoomId;
+                        raffle.RaffleType = "GUARD";
+                        raffle.EndTime    = ToLocal(item.EndTime);
+                        raffle.GuardType  = $"{item.Type}";
+                        raffle.Data       = JsonConvert.SerializeObject(item);
+                        raffle.CreateAt   = ToLocal(item.Time);
+                        return raffle;
+                    }).ToList();
+                    list.AddRange(tmp);
                 }
+            }
+            if (tvGiftDtos.Any())
+            {
+                List<long> ids = tvGiftDtos.Select(r => r.Id).ToList();
+
+                IList<RaffleList> entitys = FindAllByRaffleIDsAndType(ids, "TV", "_west");
+                tvGiftDtos = tvGiftDtos.Where(r => entitys.All(c => c.RaffleID != r.Id)).ToList();
                 if (tvGiftDtos.Any())
                 {
-                    List<long> ids = tvGiftDtos.Select(r => r.Id).ToList();
-
-                    IList<RaffleList> entitys = RaffleList.FindAllByRaffleIDsAndType(ids, "TV");
-                    tvGiftDtos = tvGiftDtos.Where(r => entitys.All(c => c.RaffleID != r.Id)).ToList();
-                    if (tvGiftDtos.Any())
+                    var tmp = tvGiftDtos.AsParallel().Select(item =>
                     {
-                        var tmp = tvGiftDtos.AsParallel().Select(item =>
-                        {
-                            var raffle = new RaffleList();
-                            raffle.RaffleID   = raffle.RaffleIDSort = item.Id;
-                            raffle.RoomID     = item.RoomId;
-                            raffle.RaffleType = "TV";
-                            raffle.EndTime    = ToLocal(item.EndTime);
-                            raffle.TvType     = item.GiftTypeForJoin;
-                            raffle.Data       = JsonConvert.SerializeObject(item);
-                            raffle.CreateAt   = ToLocal(item.Time);
-                            return raffle;
-                        }).ToList();
-                        list.AddRange(tmp);
-                    }
+                        var raffle = new RaffleList() {TvType = "", GuardType = ""};
+                        raffle.RaffleID   = raffle.RaffleIDSort = item.Id;
+                        raffle.RoomID     = item.RoomId;
+                        raffle.RaffleType = "TV";
+                        raffle.EndTime    = ToLocal(item.EndTime);
+                        raffle.TvType     = item.GiftTypeForJoin;
+                        raffle.Data       = JsonConvert.SerializeObject(item);
+                        raffle.CreateAt   = ToLocal(item.Time);
+                        return raffle;
+                    }).ToList();
+                    list.AddRange(tmp);
                 }
-                if (list.Any())
+            }
+            if (pkGiftDtos.Any())
+            {
+                List<long> ids = tvGiftDtos.Select(r => r.Id).ToList();
+
+                IList<RaffleList> entitys = FindAllByRaffleIDsAndType(ids, "PK", "_west");
+                pkGiftDtos = pkGiftDtos.Where(r => entitys.All(c => c.RaffleID != r.Id)).ToList();
+                if (tvGiftDtos.Any())
                 {
-                    list.Insert();
+                    var tmp = pkGiftDtos.AsParallel().Select(item =>
+                    {
+                        var raffle = new RaffleList() {TvType = "", GuardType = ""};
+                        raffle.RaffleID   = raffle.RaffleIDSort = item.Id;
+                        raffle.RoomID     = item.RoomId;
+                        raffle.RaffleType = "PK";
+                        raffle.EndTime    = ToLocal(item.EndTime);
+                        raffle.Data       = JsonConvert.SerializeObject(item);
+                        raffle.CreateAt   = ToLocal(item.Time);
+                        return raffle;
+                    }).ToList();
+                    list.AddRange(tmp);
                 }
-                return true;
-            });
+            }
+            if (list.Any())
+            {
+                freeSql.Insert<RaffleList>(list).AsTable(s => s + "_west").ExecuteAffrows();
+            }
         }
 
         static DateTime ToLocal(long time)
         {
             return new DateTime(1970, 1, 1).ToLocalTime().AddSeconds(time);
+        }
+
+        static RaffleList FindByRaffleIDAndType(long raffle_id, string raffle_type)
+        {
+            return freeSql.Select<RaffleList>().Where(r => r.RaffleID == raffle_id && r.RaffleType == raffle_type).ToOne();
+        }
+
+        static IList<RaffleList> FindAllByRaffleIDsAndType(List<long> raffle_ids, string raffle_type, string tableExt = "")
+        {
+            return freeSql.Select<RaffleList>().AsTable((type, s) => s + tableExt).Where(r => raffle_ids.Contains(r.RaffleID) && r.RaffleType == raffle_type).ToList();
         }
 
         static RaffleList Process(string item)
@@ -171,17 +203,18 @@ namespace YjMonitor
                 string raffle_type = data["data"]["raffle_type"].Value<string>();
                 long raffle_id = data["data"]["raffle_id"].Value<long>();
                 long end_time = data["data"]["end_time"].Value<long>();
-                RaffleList raffle = RaffleList.FindByRaffleIDAndType(raffle_id, raffle_type);
+                RaffleList raffle = FindByRaffleIDAndType(raffle_id, raffle_type);
                 if (raffle != null)
                 {
                     return null;
                 }
 
-                raffle            = new RaffleList();
+                raffle            = new RaffleList() {TvType = "", GuardType = ""};
                 raffle.RaffleID   = raffle.RaffleIDSort = raffle_id;
                 raffle.RoomID     = room_id;
                 raffle.RaffleType = raffle_type;
                 raffle.EndTime    = ToLocal(end_time);
+                raffle.TvType     = raffle.GuardType = "";
                 string key = $"RR:{room_id}";
                 TimeSpan exp = raffle.EndTime - DateTime.Now;
                 var exps = RedisHelper.Ttl(key);
@@ -214,12 +247,42 @@ namespace YjMonitor
             return null;
         }
 
+        static IFreeSql freeSql;// = FreeSqlHelper.GetFreeSql($"Data Source={Path.GetFullPath("./BiliCenter.db")};PRAGMA journal_mode=WAL;Synchronous=Off;", DataType.Sqlite, true);
+
         static void Main(string[] args)
         {
-            DAL.AddConnStr("BiliCenter", "Server=127.0.0.1;port=3306;Database=im;Uid=poster;Pwd=;SslMode=none;Convert Zero Datetime=True;Allow Zero Datetime=True;Allow User Variables=True;", null,"mysql");
+            //DAL.AddConnStr("BiliCenter", "Server=127.0.0.1;port=3306;Database=im;Uid=poster;Pwd=;SslMode=none;Convert Zero Datetime=True;Allow Zero Datetime=True;Allow User Variables=True;", null,"mysql");
+            SQLiteConnectionStringBuilder builder = new SQLiteConnectionStringBuilder();
+            builder.DataSource = "./BiliCenter.db";
+            builder.JournalMode = SQLiteJournalModeEnum.Wal;
+            builder.SyncMode = SynchronizationModes.Off;
+            string s1 = builder.ToString();
+            freeSql = FreeSqlHelper.GetFreeSql(s1, DataType.Sqlite);
             XTrace.UseConsole();
             CSRedisClient csRedisClient = new CSRedis.CSRedisClient(JsonConfig<YjMonitorConfig>.Current.Redis);
             RedisHelper.Initialization(csRedisClient);
+
+            new TimerX(async state =>
+            {
+                XTrace.WriteLine("补漏刷新");
+                var raffleLists = await freeSql.Select<RaffleList>().Where(r => r.EndTime > DateTime.Now && r.RaffleType != "STORM")
+                    .GroupBy(r => new { r.RoomID, r.EndTime })
+                    .ToListAsync(a => new { RoomId = a.Key.RoomID, LastTime = a.Max(a.Key.EndTime) });
+                raffleLists.AsParallel().ForAll(async room =>
+                {
+                    string key = $"RR:{room.RoomId}";
+                    TimeSpan exp = room.LastTime - DateTime.Now;
+                    var exps = await RedisHelper.TtlAsync(key);
+                    if (exps < exp.TotalSeconds)
+                    {
+                        await RedisHelper.SetAsync(key, 1, exp.TotalSeconds.ToInt());
+                    }
+                });
+            }, null, 1000, 120_000)
+            {
+                Async = true
+            };
+
             ImHelper.Initialization(new ImClientOptions
             {
                 Redis   = csRedisClient,
@@ -231,7 +294,7 @@ namespace YjMonitor
             {
                 foreach (var item in SaveQueue.GetConsumingEnumerable())
                 {
-                    item.Insert();
+                    freeSql.Insert(item).ExecuteAffrows();
                     Thread.Sleep(50);
                 }
             });
@@ -299,7 +362,17 @@ namespace YjMonitor
                                 Queue.Enqueue((room_id, "GIFT"));
                                 break;
                             case "STORM":
-                                Queue.Enqueue((room_id, "STORM"));
+                                //Queue.Enqueue((room_id, "STORM"));
+                                ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new
+                                {
+                                    code = 0,
+                                    type = "raffle",
+                                    data = new
+                                    {
+                                        room_id     = room_id,
+                                        raffle_type = "STORM"
+                                    }
+                                }));
                                 break;
                         }
                     }
@@ -347,8 +420,8 @@ namespace YjMonitor
                 client.Log           = XTrace.Log;
                 client.MaxAsync      = 1;
                 client.AutoReconnect = 0;
-//                    client.LogSend    = true;
-//                    client.LogReceive = true;
+                //                    client.LogSend    = true;
+                //                    client.LogReceive = true;
                 client.Add(new LengthFieldCodec {Size = -4});
                 client.Opened         += Client_Opened;
                 client.Received       += Client_Received;
@@ -363,11 +436,12 @@ namespace YjMonitor
                 finally
                 {
                     onlineCheck = new TimerX(state =>
-                    {
-                        //XTrace.WriteLine("自检");
-                        ISocketClient socketClient = state as ISocketClient;
-                        if (!socketClient.Active) ReConnect();
-                    }, client, 1_000, 1_000) {CanExecute = () => !client.Active};
+                        {
+                            //XTrace.WriteLine("自检");
+                            ISocketClient socketClient = state as ISocketClient;
+                            if (!socketClient.Active) ReConnect();
+                        }, client, 1_000, 1_000)
+                        {CanExecute = () => !client.Active};
                 }
             }
 
@@ -387,18 +461,19 @@ namespace YjMonitor
                 {
                     XTrace.WriteLine("监控端连接成功！");
                     timer = new TimerX(state =>
-                    {
-                        XTrace.WriteLine("发送心跳检测...");
-                        try
                         {
-                            Send("");
-                        }
-                        catch (Exception exception)
-                        {
-                            XTrace.WriteException(exception);
-                            ReConnect();
-                        }
-                    }, null, 0, 30_000) {CanExecute = () => client.Active};
+                            XTrace.WriteLine("发送心跳检测...");
+                            try
+                            {
+                                Send("");
+                            }
+                            catch (Exception exception)
+                            {
+                                XTrace.WriteException(exception);
+                                ReConnect();
+                            }
+                        }, null, 0, 30_000)
+                        {CanExecute = () => client.Active};
                     return;
                 }
                 else if (data_type == "error")
