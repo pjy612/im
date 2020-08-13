@@ -8,7 +8,6 @@ using System;
 using aspCore.Extensions;
 using ImCore;
 using Microsoft.AspNetCore.Cors.Infrastructure;
-using Microsoft.OpenApi.Models;
 using NewLife.Log;
 using NewLife.Threading;
 using Swashbuckle.AspNetCore.Swagger;
@@ -30,7 +29,7 @@ namespace web
             services.AddMemoryCache();
            
             services.AddMvc();
-            services.AddSwaggerGen(options => { options.SwaggerDoc("v1", new OpenApiInfo()); });
+            services.AddSwaggerGen(options => { options.SwaggerDoc("v1", new Info()); });
             services.Add(ServiceDescriptor.Transient<ICorsService, WildcardCorsService>());
             services.AddCors(options =>
             {
@@ -38,7 +37,7 @@ namespace web
                     cors.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin().AllowCredentials()
                 );
                 options.AddPolicy("bilibili", cors =>
-                    cors.WithOrigins("*.bilibili.com", "*.localhost")
+                    cors.WithOrigins("*.bilibili.com", "localhost")
                         .AllowAnyHeader().AllowAnyMethod()
                         .SetIsOriginAllowedToAllowWildcardSubdomains()
                         .AllowCredentials()
