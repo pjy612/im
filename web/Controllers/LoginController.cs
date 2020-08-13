@@ -29,7 +29,7 @@ namespace web.Controllers
                     if (loginVo != null && loginVo.LoginStatus == Account.LoginStatusEnum.ByPassword)
                         account = ConvertTo(loginVo);
                     else
-                        return new {code = -101,};
+                        return new { code = -101, };
                 }
                 else
                 {
@@ -39,7 +39,7 @@ namespace web.Controllers
                         if (loginVo != null && loginVo.LoginStatus == Account.LoginStatusEnum.ByPassword)
                             account = ConvertTo(loginVo);
                         else
-                            return new {code = -101,};
+                            return new { code = -101, };
                     }
                     else
                     {
@@ -52,10 +52,11 @@ namespace web.Controllers
                         }
                         if (needRefresh)
                         {
-                            var refresh = ByPassword.RefreshToken(account.AccessToken, account.RefreshToken);
-                            if (refresh.HasValue)
+                            Account tmp = new Account();
+                            var refresh = ByPassword.RefreshToken(account.AccessToken, account.RefreshToken, ref tmp);
+                            if (refresh)
                             {
-                                account.Expires_AccessToken = refresh.Value;
+                                account = ConvertTo(account, tmp);
                             }
                             else
                             {
@@ -63,7 +64,7 @@ namespace web.Controllers
                                 if (loginVo != null && loginVo.LoginStatus == Account.LoginStatusEnum.ByPassword)
                                     account = ConvertTo(loginVo);
                                 else
-                                    return new {code = -101,};
+                                    return new { code = -101, };
                             }
                         }
                     }
@@ -72,11 +73,10 @@ namespace web.Controllers
             }
             finally
             {
-               
+
             }
             return new { code = 0, data = account };
         }
-
 
         private AccountVO ConvertTo(Account src)
         {
@@ -88,6 +88,27 @@ namespace web.Controllers
                 if (info != null)
                     if (propertyInfo.CanWrite)
                         propertyInfo.SetValue(target, info.GetValue(src));
+            }
+            return target;
+        }
+
+        private AccountVO ConvertTo(AccountVO target, Account src)
+        {
+            var fieldInfos = src.GetType().GetFields();
+            foreach (var propertyInfo in typeof(AccountVO).GetProperties())
+            {
+                var info = fieldInfos.FirstOrDefault(r => r.Name == propertyInfo.Name && r.FieldType == propertyInfo.PropertyType);
+                if (info != null)
+                {
+                    if (propertyInfo.CanWrite)
+                    {
+                        var value = propertyInfo.GetValue(target);
+                        if (info.GetValue(src) != null && info.GetValue(src) != value)
+                        {
+                            propertyInfo.SetValue(target, info.GetValue(src));
+                        }
+                    }
+                }
             }
             return target;
         }
