@@ -2,14 +2,9 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp2.2</TargetFramework>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
     <AutoGenerateBindingRedirects>False</AutoGenerateBindingRedirects>
   </PropertyGroup>
-
-  <ItemGroup>
-    <None Remove="Program.cs~RFb6cc07c.TMP" />
-    <None Remove="Program.cs~RFd804be4.TMP" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="RestSharp" Version="106.11.4" />

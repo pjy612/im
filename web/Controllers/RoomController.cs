@@ -31,7 +31,7 @@ namespace web.Controllers
                 RoomInitList roomInitList = RoomInitList.FindByKey(id);
                 if (roomInitList == null)
                 {
-                    RoomQueue.Instance.QueueRoomSet.Add(id);
+                    RoomQueue.Instance.QueueRoomSet.Enqueue(id);
                     return new {code = -1};
                 }
                 else
@@ -39,7 +39,7 @@ namespace web.Controllers
                     var entity = RoomSort.FindByKey(id);
                     if (entity == null || entity.LastUpdateTime < DateTime.Today.AddDays(-1))
                     {
-                        RoomQueue.Instance.QueueRoomSet.Add(id);
+                        RoomQueue.Instance.QueueRoomSet.Enqueue(id);
                     }
                 }
                 return new {code = -1, data = roomInitList};
@@ -52,7 +52,7 @@ namespace web.Controllers
         {
             RestClient client = new RestClient();
             RestRequest req = new RestRequest($"https://api.live.bilibili.com/room/v1/Danmu/getConf?room_id={room_id}&platform=pc&player=web", Method.GET);
-            IRestResponse<object> task = await client.ExecuteGetTaskAsync<object>(req);
+            IRestResponse<object> task = await client.ExecuteGetAsync<object>(req);
             return task.Data;
         }
 
@@ -69,7 +69,7 @@ namespace web.Controllers
                     ids.RemoveAll(r => allRoomIds.Contains(r));
                     if (ids.Any())
                     {
-                        ids.AsParallel().ForAll(r => RoomQueue.Instance.QueueRoomSet.Add(r));
+                        ids.AsParallel().ForAll(r => RoomQueue.Instance.QueueRoomSet.Enqueue(r));
                     }
                 });
                 return new {code = 0};

@@ -24,16 +24,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="ImClient.cs~RF5095395.TMP" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="CSRedisCore" Version="3.6.5" />
     <PackageReference Include="FreeSql" Version="1.6.0" />
     <PackageReference Include="FreeSql.Provider.Sqlite" Version="1.6.0" />
-    <PackageReference Include="Microsoft.AspNetCore" Version="2.2.0" />
-    <PackageReference Include="Microsoft.AspNetCore.WebSockets" Version="2.2.1" />
+    <PackageReference Include="Microsoft.AspNetCore" Version="2.1.7" />
+    <PackageReference Include="Microsoft.AspNetCore.WebSockets" Version="2.1.7" />
     <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
+    <PackageReference Include="System.Security.Permissions" Version="4.7.0" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
     <Reference Include="NewLife.Core">

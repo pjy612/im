@@ -10,6 +10,7 @@ using ImCore;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.OpenApi.Models;
 using NewLife.Log;
+using NewLife.Threading;
 using Swashbuckle.AspNetCore.Swagger;
 
 namespace web
@@ -112,7 +113,10 @@ namespace web
                 {
                     //Console.WriteLine(t.clientId + "下线了");
                 });
-            //RoomQueue.Instance.GetSort();
+            TimerX.Delay(state =>
+            {
+                RoomQueue roomQueue = RoomQueue.Instance;
+            },1000);
             //            TimerX ShowState = new TimerX(state =>
             //                {
             //                    //if (queueLazyValue.RoomNeedLoad.Count > 0 || queueLazyValue.QueueRoomSet.Count > 0 || queueLazyValue.ProcessCollection.Count > 0)

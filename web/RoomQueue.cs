@@ -20,7 +20,7 @@ namespace web
     public class RoomQueue
     {
         public readonly BlockingCollection<long> ProcessCollection = new BlockingCollection<long>();
-        public readonly HashSet<long> QueueRoomSet = new HashSet<long>();
+        public readonly ConcurrentQueue<long> QueueRoomSet = new ConcurrentQueue<long>();
         public readonly List<long> RoomNeedLoad = new List<long>();
         public static readonly RoomQueue Instance = new RoomQueue();
 
@@ -28,13 +28,17 @@ namespace web
         {
             SortData = new List<RoomUserDataDto>();
             AllRoomIds = new List<long>();
+            GetAllRoomIds();
             GetSort();
             var timerX = new TimerX(state =>
             {
-                long[] ids = QueueRoomSet.ToArray();
-                ids.AsParallel().ForAll(id =>
+                var ids = new HashSet<long>();
+                while (QueueRoomSet.TryDequeue(out long roomid))
                 {
-                    QueueRoomSet.Remove(id);
+                    ids.Add(roomid);
+                }
+                ids.ToList().ForEach(id =>
+                {
                     if (!ProcessCollection.Contains(id))
                     {
                         ProcessCollection.Add(id);
