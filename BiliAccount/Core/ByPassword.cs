@@ -215,7 +215,7 @@ namespace BiliAccount.Core
         /// <param name="refresh_token"></param>
         /// /// <param name="account">账号实例</param>
         /// <returns>到期时间</returns>
-        public static bool RefreshToken(string access_token, string refresh_token,ref Account account)
+        public static bool RefreshToken(string access_token, string refresh_token, ref Account account)
         {
             string parm = "access_token=" + access_token + "&appkey=" + Config.Instance.Appkey + "&refresh_token=" + refresh_token + "&ts=" + TimeStamp;
             parm += "&sign=" + GetSign(parm);
@@ -294,6 +294,23 @@ namespace BiliAccount.Core
                 req.UserAgent = Config.Instance.User_Agent;
                 rep = (HttpWebResponse)req.GetResponse();
 
+                foreach (string i in rep.Headers.GetValues("Set-Cookie"))
+                {
+                    string[] tmp = i.Split(';');
+                    string[] tmp2 = tmp[0].Split('=');
+
+                    cookies += tmp[0] + "; ";
+                    cookiesC.Add(new Cookie(tmp2[0], tmp2[1]) { Domain = ".bilibili.com" });
+                    expires = DateTime.Parse(tmp[2].Split('=')[1]);
+
+                    if (tmp2[0] == "bili_jct")
+                        csrf_token = tmp2[1];
+                }
+                cookies = cookies.Substring(0, cookies.Length - 2);
+            }
+            catch (WebException webException)
+            {
+                rep = (HttpWebResponse)webException.Response;
                 foreach (string i in rep.Headers.GetValues("Set-Cookie"))
                 {
                     string[] tmp = i.Split(';');
