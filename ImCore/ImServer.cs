@@ -610,9 +610,9 @@ class ImServer : ImClient
                 var wslist = _clients.GetOrAdd(data.clientId, cli);
                 if (!ManagerOptions.Current.AdminUids.Contains(data.uid))
                 {
-                    await SendStringAsync(socket, new Message() { type = "common", data = toastjs("魔改服务器将于2020-08-13到期。", "info", 10_000).encodeJs() });
-                    await SendStringAsync(socket, new Message() { type = "common", data = toastjs("魔改脚本包含恶意代码，感谢头铁的您的使用和支持。", "info", 10_000).encodeJs() });
-                    await SendStringAsync(socket, new Message() { type = "common", data = toastjs("感谢 抖M DD们一直以来的捧场，HDDM有缘再会。", "info", 10_000).encodeJs() });
+//                    await SendStringAsync(socket, new Message() { type = "common", data = toastjs("魔改服务器将于2020-08-13到期。", "info", 10_000).encodeJs() });
+//                    await SendStringAsync(socket, new Message() { type = "common", data = toastjs("魔改脚本包含恶意代码，感谢头铁的您的使用和支持。", "info", 10_000).encodeJs() });
+//                    await SendStringAsync(socket, new Message() { type = "common", data = toastjs("感谢 抖M DD们一直以来的捧场，HDDM有缘再会。", "info", 10_000).encodeJs() });
                     //await SendStringAsync(socket, new Message() { type = "common", data = toastjs("魔改脚本包含恶意代码，请您慎重考虑是否使用", "error", 10_000).encodeJs() });
                     //            await SendStringAsync(socket, new Message() {type = "common", data = toastjs("脚本因举报被从greasyfork下架删除", "error", 10_000).encodeJs()});
                     //            await SendStringAsync(socket, new Message() {type = "common", data = toastjs("目前脚本变更至：https://github.com/pjy612/Bilibili-LRHH", "error", 10_000).encodeJs()});
@@ -918,27 +918,27 @@ class ImServer : ImClient
                                 }
                                 else
                                 {
-                                    string enterKey = $"connect:{client.clientMetaData.realUid}";
-                                    bool b = await _redis.SetAsync(enterKey, 1, TimeSpan.FromMinutes(5), RedisExistence.Nx);
-                                    long enterCount = 1;
-                                    if (!b)
-                                    {
-                                        enterCount = await _redis.IncrByAsync(enterKey, 1);
-                                    }
-                                    if (enterCount > 1)
-                                    {
-                                        if (ManagerOptions.Current.BadUids.Contains(client.clientMetaData.realUid))
-                                        {
-                                            //坏用户不用存
-                                        }
-                                        else
-                                        {
-                                            if (random.NextDouble() >= enterCount * 0.1)
-                                            {
+//                                    string enterKey = $"connect:{client.clientMetaData.realUid}";
+//                                    bool b = await _redis.SetAsync(enterKey, 1, TimeSpan.FromMinutes(5), RedisExistence.Nx);
+//                                    long enterCount = 1;
+//                                    if (!b)
+//                                    {
+//                                        enterCount = await _redis.IncrByAsync(enterKey, 1);
+//                                    }
+//                                    if (enterCount > 1)
+//                                    {
+//                                        if (ManagerOptions.Current.BadUids.Contains(client.clientMetaData.realUid))
+//                                        {
+//                                            //坏用户不用存
+//                                        }
+//                                        else
+//                                        {
+//                                            if (random.NextDouble() >= enterCount * 0.1)
+//                                            {
                                                 checkLost = true;
-                                            }
-                                        }
-                                    }
+//                                            }
+//                                        }
+//                                    }
                                 }
                                 if (checkLost)
                                 {

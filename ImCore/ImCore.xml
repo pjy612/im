@@ -115,6 +115,11 @@
             Replacement function for complicated lookups (e.g. Hello $3 $2)
             </summary>
         </member>
+        <member name="P:ImClientInfo.key">
+            <summary>
+            bilipush 连接key
+            </summary>
+        </member>
         <member name="T:ImClientOptions">
             <summary>
             im 核心类实现的配置所需

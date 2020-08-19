@@ -52,7 +52,7 @@ namespace web.Controllers
         /// <param name="uid"></param>
         /// <returns></returns>
         [HttpPost("pre-connect")]
-        public async Task<object> preConnect([FromForm] Guid? websocketId, [FromForm] int? uid, [FromForm] string version)
+        public async Task<object> preConnect(Guid? websocketId, int? uid, string version, string key)
         {
             //await connectLock.WaitAsync();
             try
@@ -62,7 +62,8 @@ namespace web.Controllers
                     bool inblack = await RedisHelper.SIsMemberAsync("bpblack", Ip);
                     if (inblack)
                     {
-                        return new {code = -1, msg = $"检测到黑名单，限制连接"};
+                        return NotFound();
+                        //return new {code = -1, msg = $"检测到黑名单，限制连接"};
                     }
                     long roomId = GetRoomId();
                     long canEnterRoom = await RedisHelper.GetAsync<long>("jroom");
@@ -89,7 +90,8 @@ namespace web.Controllers
                         {
                             if (count >= 5)
                             {
-                                return new {code = -1, msg = $"请求频繁，请稍后再试"};
+                                return NotFound();
+                                //return new {code = -1, msg = $"请求频繁，请稍后再试"};
                             }
                         }
                     }
@@ -102,27 +104,41 @@ namespace web.Controllers
                 Version.TryParse(version, out Version vers);
                 if (UA.ToLower().Contains("firefox"))
                 {
-                    return new {code = -1, msg = "请勿使用火狐浏览器"};
+                    return NotFound();
+                    //return new {code = -1, msg = "请勿使用火狐浏览器"};
                 }
                 if (!uid.HasValue)
                 {
-                    return new {code = -1, msg = $"请更新脚本至v{lastVersion}或以上"};
+                    return NotFound();
+                    //return new {code = -1, msg = $"请更新脚本至v{lastVersion}或以上"};
                 }
                 if (vers == null || vers < lastVersion)
                 {
-                    return new {code = -1, msg = $"请更新脚本至v{lastVersion}或以上"};
+                    return NotFound();
+                    //return new {code = -1, msg = $"请更新脚本至v{lastVersion}或以上"};
                 }
                 if (!ManagerOptions.Current.AdminUids.Contains(uid.ToLong()))
                 {
+                    if (key.IsNullOrWhiteSpace())
+                    {
+                        return NotFound();
+                    }
+                    var rightKey = await RedisHelper.GetAsync($"bpkey:{uid.ToLong()}");
+                    if (key != rightKey)
+                    {
+                        return NotFound();
+                    }
                     if (ManagerOptions.Current.BlackUids.Contains(uid.ToLong()))
                     {
-                        return new {code = -1, msg = $"请更换脚本"};
+                        return NotFound();
+                        //return new {code = -1, msg = $"请更换脚本"};
                     }
                     if (ManagerOptions.Current.openClient == 0)
                     {
                         if (new Random(Guid.NewGuid().GetHashCode()).NextDouble() <= ManagerOptions.Current.breakLimit)
                         {
-                            return new {code = -1, msg = $"服务器繁忙，请稍后再试"};
+                            return NotFound();
+                            //return new {code = -1, msg = $"服务器繁忙，请稍后再试"};
                         }
                     }
                 }
@@ -139,7 +155,7 @@ namespace web.Controllers
                         websocketId = new Guid(guid);
                     }
                 }
-                var wsserver = await ImHelper.PrevConnectServerAsync(websocketId.Value, new ImClientInfo {uid = uid.Value, Ip = Ip, referer = referer, version = vers});
+                var wsserver = await ImHelper.PrevConnectServerAsync(websocketId.Value, new ImClientInfo {uid = uid.Value, Ip = Ip, referer = referer, version = vers, key = key});
                 return new
                 {
                     code        = 0,
@@ -151,6 +167,23 @@ namespace web.Controllers
             {
                 //connectLock.Release();
             }
+        }
+
+        [HttpPost("add_user")]
+        public object AddUser(int uid)
+        {
+            string s = RedisHelper.Get($"bpkey:{uid}");
+            if (!s.IsNullOrWhiteSpace())
+            {
+                return s;
+            }
+            string key = uid.ToString();
+            Enumerable.Range(0,5).ToList().ForEach((i) =>
+            {
+                key = key.MD5();
+            });
+            RedisHelper.Set($"bpkey:{uid}", key);
+            return key;
         }
 
         [HttpGet("OnlineData")]

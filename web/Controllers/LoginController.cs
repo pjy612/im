@@ -9,6 +9,7 @@ using BiliAccount;
 using BiliAccount.Linq;
 using CSRedis;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.TagHelpers.Cache;
 using NewLife.Reflection;
 using NewLife.Serialization;
 
@@ -17,10 +18,26 @@ namespace web.Controllers
     [Route("login")]
     public class LoginController : Controller
     {
+        public string Ip => this.Request.Headers["X-Real-IP"].FirstOrDefault() ?? this.Request.HttpContext.Connection.RemoteIpAddress.MapToIPv4().ToString();
         [HttpGet("v1/login")]
         public object Login(string username, string password)
         {
-            var account = RedisHelper.Get<AccountVO>($"account:{username}");
+            var (b, accountVo) = LoginBase(username, password, $"account:{username}:{Ip}");
+            if (b)
+            {
+                return new { code = 0, data = accountVo };
+            }
+            (b, accountVo) = LoginBase(username, password, $"account:{username}");
+            if (b)
+            {
+                return new { code = 0, data = accountVo };
+            }
+            return new { code = -101 };
+        }
+
+        private (bool, AccountVO) LoginBase(string username, string password, string cacheKey)
+        {
+            var account = RedisHelper.Get<AccountVO>(cacheKey);
             try
             {
                 if (account == null)
@@ -29,7 +46,7 @@ namespace web.Controllers
                     if (loginVo != null && loginVo.LoginStatus == Account.LoginStatusEnum.ByPassword)
                         account = ConvertTo(loginVo);
                     else
-                        return new { code = -101, };
+                        return (false, null);
                 }
                 else
                 {
@@ -39,7 +56,7 @@ namespace web.Controllers
                         if (loginVo != null && loginVo.LoginStatus == Account.LoginStatusEnum.ByPassword)
                             account = ConvertTo(loginVo);
                         else
-                            return new { code = -101, };
+                            return (false, null);
                     }
                     else
                     {
@@ -64,18 +81,29 @@ namespace web.Controllers
                                 if (loginVo != null && loginVo.LoginStatus == Account.LoginStatusEnum.ByPassword)
                                     account = ConvertTo(loginVo);
                                 else
-                                    return new { code = -101, };
+                                    return (false, null);
                             }
                         }
                     }
                 }
-                RedisHelper.Set($"account:{username}", account);
+                RedisHelper.Set(cacheKey, account);
             }
             finally
             {
 
             }
-            return new { code = 0, data = account };
+            return (true, account);
+        }
+
+        [HttpGet("v1/loginex")]
+        public object LoginEx(string username, string password)
+        {
+            var (b, accountVo) = LoginBase(username, password, $"account:{username}");
+            if (b)
+            {
+                return new { code = 0, data = accountVo };
+            }
+            return new { code = -101 };
         }
 
         private AccountVO ConvertTo(Account src)

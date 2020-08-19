@@ -27,6 +27,10 @@ public class ImClientInfo
     public Version version { get; set; }
     public string token => $"{uid}{Ip}{referer}{UA}".MD5();
     public long roomid { get; set; }
+    /// <summary>
+    /// bilipush 连接key
+    /// </summary>
+    public string key { get; set; }
 }
 
 /// <summary>
@@ -290,7 +294,7 @@ try
 {{    
     console.log('触发DD节奏风暴[{roomId}]:{msg}');
     function sendDm(msg,roomid = 0){{
-        {(force ? "" : "if (CONFIG && !CONFIG.DD_DM_STORM){return;}")}
+        {(force ? "" : "if (CONFIG && !CONFIG.DD_BP_CONFIG.DM_STORM){return;}")}
         if (!roomid)
         {{
             roomid = BilibiliLive.ROOMID;

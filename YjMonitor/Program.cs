@@ -40,7 +40,7 @@ namespace YjMonitor
         public string Key { get; set; } = "admin";
         public string Address { get; set; } = "tcp://127.0.0.1:8002";
         public string Redis { get; set; } = "127.0.0.1:6379,poolsize=5";
-        public string[] ImServers { get; set; } = new[] {"127.0.0.1:7777"};
+        public string[] ImServers { get; set; } = new[] { "127.0.0.1:7777" };
         public double Rand { get; set; } = 0.8;
     }
 
@@ -92,14 +92,14 @@ namespace YjMonitor
                 {
                     var tmp = stormGiftDtos.AsParallel().Select(item =>
                     {
-                        var raffle = new RaffleList() {TvType = "", GuardType = ""};
-                        raffle.RaffleID     = item.Id;
+                        var raffle = new RaffleList() { TvType = "", GuardType = "" };
+                        raffle.RaffleID = item.Id;
                         raffle.RaffleIDSort = item.Id / 1000000;
-                        raffle.RoomID       = item.RoomId;
-                        raffle.RaffleType   = "STORM";
-                        raffle.EndTime      = ToLocal(item.Time + 60);
-                        raffle.Data         = JsonConvert.SerializeObject(item);
-                        raffle.CreateAt     = ToLocal(item.Time);
+                        raffle.RoomID = item.RoomId;
+                        raffle.RaffleType = "STORM";
+                        raffle.EndTime = ToLocal(item.Time + 60);
+                        raffle.Data = JsonConvert.SerializeObject(item);
+                        raffle.CreateAt = ToLocal(item.Time);
                         return raffle;
                     }).ToList();
                     list.AddRange(tmp);
@@ -115,14 +115,14 @@ namespace YjMonitor
                 {
                     var tmp = guardGiftDtos.AsParallel().Select(item =>
                     {
-                        var raffle = new RaffleList() {TvType = "", GuardType = ""};
-                        raffle.RaffleID   = raffle.RaffleIDSort = item.Id;
-                        raffle.RoomID     = item.RoomId;
+                        var raffle = new RaffleList() { TvType = "", GuardType = "" };
+                        raffle.RaffleID = raffle.RaffleIDSort = item.Id;
+                        raffle.RoomID = item.RoomId;
                         raffle.RaffleType = "GUARD";
-                        raffle.EndTime    = ToLocal(item.EndTime);
-                        raffle.GuardType  = $"{item.Type}";
-                        raffle.Data       = JsonConvert.SerializeObject(item);
-                        raffle.CreateAt   = ToLocal(item.Time);
+                        raffle.EndTime = ToLocal(item.EndTime);
+                        raffle.GuardType = $"{item.Type}";
+                        raffle.Data = JsonConvert.SerializeObject(item);
+                        raffle.CreateAt = ToLocal(item.Time);
                         return raffle;
                     }).ToList();
                     list.AddRange(tmp);
@@ -138,14 +138,14 @@ namespace YjMonitor
                 {
                     var tmp = tvGiftDtos.AsParallel().Select(item =>
                     {
-                        var raffle = new RaffleList() {TvType = "", GuardType = ""};
-                        raffle.RaffleID   = raffle.RaffleIDSort = item.Id;
-                        raffle.RoomID     = item.RoomId;
+                        var raffle = new RaffleList() { TvType = "", GuardType = "" };
+                        raffle.RaffleID = raffle.RaffleIDSort = item.Id;
+                        raffle.RoomID = item.RoomId;
                         raffle.RaffleType = "TV";
-                        raffle.EndTime    = ToLocal(item.EndTime);
-                        raffle.TvType     = item.GiftTypeForJoin;
-                        raffle.Data       = JsonConvert.SerializeObject(item);
-                        raffle.CreateAt   = ToLocal(item.Time);
+                        raffle.EndTime = ToLocal(item.EndTime);
+                        raffle.TvType = item.GiftTypeForJoin;
+                        raffle.Data = JsonConvert.SerializeObject(item);
+                        raffle.CreateAt = ToLocal(item.Time);
                         return raffle;
                     }).ToList();
                     list.AddRange(tmp);
@@ -161,13 +161,13 @@ namespace YjMonitor
                 {
                     var tmp = pkGiftDtos.AsParallel().Select(item =>
                     {
-                        var raffle = new RaffleList() {TvType = "", GuardType = ""};
-                        raffle.RaffleID   = raffle.RaffleIDSort = item.Id;
-                        raffle.RoomID     = item.RoomId;
+                        var raffle = new RaffleList() { TvType = "", GuardType = "" };
+                        raffle.RaffleID = raffle.RaffleIDSort = item.Id;
+                        raffle.RoomID = item.RoomId;
                         raffle.RaffleType = "PK";
-                        raffle.EndTime    = ToLocal(item.EndTime);
-                        raffle.Data       = JsonConvert.SerializeObject(item);
-                        raffle.CreateAt   = ToLocal(item.Time);
+                        raffle.EndTime = ToLocal(item.EndTime);
+                        raffle.Data = JsonConvert.SerializeObject(item);
+                        raffle.CreateAt = ToLocal(item.Time);
                         return raffle;
                     }).ToList();
                     list.AddRange(tmp);
@@ -209,12 +209,12 @@ namespace YjMonitor
                     return null;
                 }
 
-                raffle            = new RaffleList() {TvType = "", GuardType = ""};
-                raffle.RaffleID   = raffle.RaffleIDSort = raffle_id;
-                raffle.RoomID     = room_id;
+                raffle = new RaffleList() { TvType = "", GuardType = "" };
+                raffle.RaffleID = raffle.RaffleIDSort = raffle_id;
+                raffle.RoomID = room_id;
                 raffle.RaffleType = raffle_type;
-                raffle.EndTime    = ToLocal(end_time);
-                raffle.TvType     = raffle.GuardType = "";
+                raffle.EndTime = ToLocal(end_time);
+                raffle.TvType = raffle.GuardType = "";
                 string key = $"RR:{room_id}";
                 TimeSpan exp = raffle.EndTime - DateTime.Now;
                 var exps = RedisHelper.Ttl(key);
@@ -236,7 +236,7 @@ namespace YjMonitor
                         raffle.RaffleIDSort = raffle_id / 1000000;
                         break;
                 }
-                raffle.Data     = item;
+                raffle.Data = item;
                 raffle.CreateAt = DateTime.Now;
                 return raffle;
             }
@@ -266,16 +266,23 @@ namespace YjMonitor
             {
                 XTrace.WriteLine("补漏刷新");
                 var raffleLists = await freeSql.Select<RaffleList>().Where(r => r.EndTime > DateTime.Now && r.RaffleType != "STORM")
-                    .GroupBy(r => new { r.RoomID, r.EndTime })
-                    .ToListAsync(a => new { RoomId = a.Key.RoomID, LastTime = a.Max(a.Key.EndTime) });
+                    .GroupBy(r => new { r.RoomID })
+                    .ToListAsync(a => new { RoomId = a.Key.RoomID, LastTime = a.Max(a.Value.EndTime)});
                 raffleLists.AsParallel().ForAll(async room =>
                 {
                     string key = $"RR:{room.RoomId}";
                     TimeSpan exp = room.LastTime - DateTime.Now;
-                    var exps = await RedisHelper.TtlAsync(key);
-                    if (exps < exp.TotalSeconds)
+                    if (exp.TotalSeconds > 0)
                     {
-                        await RedisHelper.SetAsync(key, 1, exp.TotalSeconds.ToInt());
+                        var exps = await RedisHelper.TtlAsync(key);
+                        if (exps == -1)
+                        {
+                            await RedisHelper.DelAsync(key);
+                        }
+                        if (exps < exp.TotalSeconds)
+                        {
+                            await RedisHelper.SetAsync(key, 1, exp.TotalSeconds.ToInt());
+                        }
                     }
                 });
             }, null, 1000, 120_000)
@@ -285,7 +292,7 @@ namespace YjMonitor
 
             ImHelper.Initialization(new ImClientOptions
             {
-                Redis   = csRedisClient,
+                Redis = csRedisClient,
                 Servers = JsonConfig<YjMonitorConfig>.Current.ImServers
             });
             BlockingCollection<RaffleList> SaveQueue = new BlockingCollection<RaffleList>();
@@ -318,7 +325,7 @@ namespace YjMonitor
                                 type = "raffle",
                                 data = new
                                 {
-                                    room_id     = item.Item1,
+                                    room_id = item.Item1,
                                     raffle_type = item.Item2
                                 }
                             }));
@@ -369,7 +376,7 @@ namespace YjMonitor
                                     type = "raffle",
                                     data = new
                                     {
-                                        room_id     = room_id,
+                                        room_id = room_id,
                                         raffle_type = "STORM"
                                     }
                                 }));
@@ -416,19 +423,19 @@ namespace YjMonitor
 
             public void Connect()
             {
-                client               = net.CreateRemote() as TcpSession;
-                client.Log           = XTrace.Log;
-                client.MaxAsync      = 1;
+                client = net.CreateRemote() as TcpSession;
+                client.Log = XTrace.Log;
+                client.MaxAsync = 1;
                 client.AutoReconnect = 0;
                 //                    client.LogSend    = true;
                 //                    client.LogReceive = true;
-                client.Add(new LengthFieldCodec {Size = -4});
-                client.Opened         += Client_Opened;
-                client.Received       += Client_Received;
-                client.Closed         += Client_Closed;
-                client.Error          += Client_Error;
-                client.ThrowException =  false;
-                client.OnDisposed     += Client_OnDisposed;
+                client.Add(new LengthFieldCodec { Size = -4 });
+                client.Opened += Client_Opened;
+                client.Received += Client_Received;
+                client.Closed += Client_Closed;
+                client.Error += Client_Error;
+                client.ThrowException = false;
+                client.OnDisposed += Client_OnDisposed;
                 try
                 {
                     client.Open();
@@ -441,7 +448,7 @@ namespace YjMonitor
                             ISocketClient socketClient = state as ISocketClient;
                             if (!socketClient.Active) ReConnect();
                         }, client, 1_000, 1_000)
-                        {CanExecute = () => !client.Active};
+                    { CanExecute = () => !client.Active };
                 }
             }
 
@@ -472,8 +479,8 @@ namespace YjMonitor
                                 XTrace.WriteException(exception);
                                 ReConnect();
                             }
-                        }, null, 0, 30_000)
-                        {CanExecute = () => client.Active};
+                        }, null, 0, 20_000)
+                    { CanExecute = () => client.Active };
                     return;
                 }
                 else if (data_type == "error")
@@ -532,8 +539,8 @@ namespace YjMonitor
             protected override object Encode(IHandlerContext context, Packet msg)
             {
                 var lenByte = new Byte[4];
-                lenByte.Write((uint) msg.Count, 0, false);
-                Packet packet = new Packet(lenByte) {Next = msg};
+                lenByte.Write((uint)msg.Count, 0, false);
+                Packet packet = new Packet(lenByte) { Next = msg };
                 return packet;
             }
 
@@ -626,7 +633,7 @@ namespace YjMonitor
             /// <param name="port">监听的端口</param>
             public SocketClient(int port)
             {
-                _ip   = "127.0.0.1";
+                _ip = "127.0.0.1";
                 _port = port;
             }
 
@@ -637,7 +644,7 @@ namespace YjMonitor
             /// <param name="port">监听的端口</param>
             public SocketClient(string ip, int port)
             {
-                _ip   = ip;
+                _ip = ip;
                 _port = port;
             }
 
