@@ -1234,6 +1234,7 @@ public class ManagerOptions : JsonConfig<ManagerOptions>
         BlackUids = new List<long>();
         AdminUids = new List<long>();
         BadUids = new List<long>();
+        openTime = new List<OpenTime>();
     }
 
     public List<long> BlackUids { get; set; }
@@ -1245,5 +1246,12 @@ public class ManagerOptions : JsonConfig<ManagerOptions>
     public int openClient { get; set; } = 1;
     public double breakLimit { get; set; } = 1;
     public int jroom { get; set; } = 1;
+    public List<OpenTime> openTime { get; set; }
+}
+
+public class OpenTime
+{
+    public DateTime s { get; set; }
+    public DateTime e { get; set; }
 }
 #endif

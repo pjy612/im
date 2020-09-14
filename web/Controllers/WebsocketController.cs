@@ -3,13 +3,16 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Drawing.Imaging;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using BiliEntity;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using NewLife.Caching;
+using NewLife.IO;
 using NewLife.Json;
 using NewLife.Security;
 using NewLife.Threading;
@@ -27,7 +30,7 @@ namespace web.Controllers
         private static SemaphoreSlim connectLock = new SemaphoreSlim(100, 100);
         ConcurrentDictionary<string, DateTime> lastConnectTime = new ConcurrentDictionary<string, DateTime>();
         ConcurrentDictionary<string, int> lastConnectCount = new ConcurrentDictionary<string, int>();
-        static HashSet<long> tpRoomList = new HashSet<long>() {21438956};
+        static HashSet<long> tpRoomList = new HashSet<long>() { 21438956 };
 
         private long GetRoomId()
         {
@@ -72,7 +75,7 @@ namespace web.Controllers
                         if (!tpRoomList.Contains(canEnterRoom)) tpRoomList.Add(canEnterRoom);
                         if (!tpRoomList.Contains(roomId))
                         {
-                            string roomIds = new List<long>() {21438956, canEnterRoom}.Distinct().ToList().Join();
+                            string roomIds = new List<long>() { 21438956, canEnterRoom }.Distinct().ToList().Join();
                             //return new {code = -1, msg = $"bilipush仅支持直播间{roomIds}"};
                         }
                     }
@@ -119,15 +122,6 @@ namespace web.Controllers
                 }
                 if (!ManagerOptions.Current.AdminUids.Contains(uid.ToLong()))
                 {
-                    if (key.IsNullOrWhiteSpace())
-                    {
-                        return NotFound();
-                    }
-                    var rightKey = await RedisHelper.GetAsync($"bpkey:{uid.ToLong()}");
-                    if (key != rightKey)
-                    {
-                        return NotFound();
-                    }
                     if (ManagerOptions.Current.BlackUids.Contains(uid.ToLong()))
                     {
                         return NotFound();
@@ -139,6 +133,18 @@ namespace web.Controllers
                         {
                             return NotFound();
                             //return new {code = -1, msg = $"服务器繁忙，请稍后再试"};
+                        }
+                    }
+                    if (!ManagerOptions.Current.openTime.Any(r => r.s <= DateTime.Now && r.e >= DateTime.Now))
+                    {
+                        if (key.IsNullOrWhiteSpace())
+                        {
+                            return NotFound();
+                        }
+                        var rightKey = await RedisHelper.GetAsync($"bpkey:{uid.ToLong()}");
+                        if (key != rightKey)
+                        {
+                            return NotFound();
                         }
                     }
                 }
@@ -155,11 +161,11 @@ namespace web.Controllers
                         websocketId = new Guid(guid);
                     }
                 }
-                var wsserver = await ImHelper.PrevConnectServerAsync(websocketId.Value, new ImClientInfo {uid = uid.Value, Ip = Ip, referer = referer, version = vers, key = key});
+                var wsserver = await ImHelper.PrevConnectServerAsync(websocketId.Value, new ImClientInfo { uid = uid.Value, Ip = Ip, referer = referer, version = vers, key = key });
                 return new
                 {
-                    code        = 0,
-                    server      = wsserver,
+                    code = 0,
+                    server = wsserver,
                     websocketId = websocketId
                 };
             }
@@ -177,13 +183,16 @@ namespace web.Controllers
             {
                 return s;
             }
-            string key = uid.ToString();
-            Enumerable.Range(0,5).ToList().ForEach((i) =>
-            {
-                key = key.MD5();
-            });
+            string key = GetKey(uid);
             RedisHelper.Set($"bpkey:{uid}", key);
             return key;
+        }
+        private string GetKey(int uid)
+        {
+            string key = uid.ToString();
+            byte[] keyByte = key.ToHex();
+            key = $"{key}|{keyByte.Crc()}";
+            return new UTF8Encoding().GetBytes(key).RC4(keyByte).MD5().ToHex();
         }
 
         [HttpGet("OnlineData")]
@@ -192,9 +201,9 @@ namespace web.Controllers
             var onlineClients = ImHelper.GetAllClientDataByOnline().OrderBy(r => r.Value).ToDictionary(r => r.Key, r => r.Value);
             return new
             {
-                code  = 0,
+                code = 0,
                 count = onlineClients.Count,
-                data  = onlineClients
+                data = onlineClients
             };
         }
 
@@ -211,7 +220,7 @@ namespace web.Controllers
         [HttpPost("post_msg")]
         public object PostMsg([FromForm] string msg)
         {
-            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "msg", data = msg}));
+            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new { code = 0, type = "msg", data = msg }));
             return new
             {
                 code = 0
@@ -221,7 +230,7 @@ namespace web.Controllers
         [HttpPost("post_reload")]
         public object PostReload()
         {
-            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "reload"}));
+            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new { code = 0, type = "reload" }));
             return new
             {
                 code = 0
@@ -231,7 +240,7 @@ namespace web.Controllers
         [HttpPost("post_common_reload")]
         public object PostCommonReload(bool force = false)
         {
-            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "common", data = force ? ImClient.forceReloadjs.encodeJs() : ImClient.reloadjs.encodeJs()}));
+            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new { code = 0, type = "common", data = force ? ImClient.forceReloadjs.encodeJs() : ImClient.reloadjs.encodeJs() }));
             return new
             {
                 code = 0
@@ -241,7 +250,7 @@ namespace web.Controllers
         [HttpPost("post_common_only_reload")]
         public object PostCommonOnlyReload()
         {
-            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "common", data = ImClient.onlyReloadjs.encodeJs()}));
+            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new { code = 0, type = "common", data = ImClient.onlyReloadjs.encodeJs() }));
             return new
             {
                 code = 0
@@ -251,7 +260,7 @@ namespace web.Controllers
         [HttpPost("post_set_vol")]
         public object PostSetVol(decimal vol = 0.1m)
         {
-            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "common", data = ImClient.setVolJs(vol).encodeJs()}));
+            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new { code = 0, type = "common", data = ImClient.setVolJs(vol).encodeJs() }));
             return new
             {
                 code = 0
@@ -261,7 +270,7 @@ namespace web.Controllers
         [HttpPost("post_dm_storm")]
         public object PostDmStorm(string msg, string roomId = "", int time = 5, bool force = false)
         {
-            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "common", data = ImClient.dmStorm(msg, roomId, time, force).encodeJs()}));
+            ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new { code = 0, type = "common", data = ImClient.dmStorm(msg, roomId, time, force).encodeJs() }));
             return new
             {
                 code = 0
@@ -279,7 +288,7 @@ namespace web.Controllers
                 tpRoomList.Add(jumpRoom);
                 RedisHelper.Set("jroom", jumpRoom);
                 RedisHelper.Del("jroomdone");
-                ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new {code = 0, type = "common", data = ImClient.jumpToRoom(jumpRoom, changeVol, vol, reload).encodeJs()}));
+                ImHelper.SendMessageOnline(JsonConvert.SerializeObject(new { code = 0, type = "common", data = ImClient.jumpToRoom(jumpRoom, changeVol, vol, reload).encodeJs() }));
             }
             return new
             {
@@ -296,7 +305,7 @@ namespace web.Controllers
         {
             return new
             {
-                code     = 0,
+                code = 0,
                 channels = ImHelper.GetChanList()
             };
         }
@@ -349,7 +358,7 @@ namespace web.Controllers
 
             //if (loginUser.好友 != recieveUser) throw new Exception("不是好友");
 
-            ImHelper.SendMessage(senderWebsocketId, new[] {receiveWebsocketId}, message, isReceipt);
+            ImHelper.SendMessage(senderWebsocketId, new[] { receiveWebsocketId }, message, isReceipt);
 
             //loginUser.保存记录(message);
             //recieveUser.保存记录(message);
