@@ -133,6 +133,8 @@ namespace BiliAccount
             /// 手机验证
             /// </summary>
             NeedTelVerify = -3,
+            NeedRisk = -5,
+            NeedAccessToken = -6,
 
             /// <summary>
             /// 图片验证码

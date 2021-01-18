@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web;
 using BiliAccount;
 using BiliAccount.Linq;
 using CSRedis;
@@ -12,6 +14,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.TagHelpers.Cache;
 using NewLife.Reflection;
 using NewLife.Serialization;
+using Newtonsoft.Json;
 
 namespace web.Controllers
 {
@@ -20,23 +23,32 @@ namespace web.Controllers
     {
         public string Ip => this.Request.Headers["X-Real-IP"].FirstOrDefault() ?? this.Request.HttpContext.Connection.RemoteIpAddress.MapToIPv4().ToString();
         [HttpGet("v1/login")]
-        public object Login(string username, string password)
+        public object Login(string username, string password, string tmpcode = null)
         {
-            var (b, accountVo) = LoginBase(username, password, $"account:{username}:{Ip}");
-            if (b)
+            //            var (b, code, accountVo) = LoginBase(username, password, $"account:{username}:{Ip}");
+            //            if (b)
+            //            {
+            //                return new { code = 0, data = accountVo };
+            //            }
+            var loginBase = LoginBase(username, password, $"account:{username}", tmpcode);
+            if (loginBase.success)
             {
-                return new { code = 0, data = accountVo };
+                return new { code = 0, data = loginBase.accountVo };
             }
-            (b, accountVo) = LoginBase(username, password, $"account:{username}");
-            if (b)
-            {
-                return new { code = 0, data = accountVo };
-            }
-            return new { code = -101 };
+            return new { code = -101, e = loginBase.code, url = loginBase.url };
         }
 
-        private (bool, AccountVO) LoginBase(string username, string password, string cacheKey)
+        private class LoginInfo
         {
+            public bool success { get; set; }
+            public int code { get; set; }
+            public string url { get; set; }
+            public AccountVO accountVo { get; set; }
+        }
+
+        private LoginInfo LoginBase(string username, string password, string cacheKey, string tmpCode = null)
+        {
+            LoginInfo ret = new LoginInfo();
             var account = RedisHelper.Get<AccountVO>(cacheKey);
             try
             {
@@ -46,7 +58,11 @@ namespace web.Controllers
                     if (loginVo != null && loginVo.LoginStatus == Account.LoginStatusEnum.ByPassword)
                         account = ConvertTo(loginVo);
                     else
-                        return (false, null);
+                    {
+                        ret.success = false;
+                        ret.code = 101;
+                        return ret;
+                    }
                 }
                 else
                 {
@@ -56,12 +72,33 @@ namespace web.Controllers
                         if (loginVo != null && loginVo.LoginStatus == Account.LoginStatusEnum.ByPassword)
                             account = ConvertTo(loginVo);
                         else
-                            return (false, null);
+                        {
+                            ret.code = 102;
+                            return ret;
+                        }
                     }
                     else
                     {
+                        if (account.AccessToken.IsNullOrWhiteSpace())
+                        {
+                            Account tmp = ConvertTo(account);
+                            ByPassword.GetAccessTokenByCsrfToken(ref tmp);
+                            if (tmp.LoginStatus == Account.LoginStatusEnum.ByPassword)
+                            {
+                                account = ConvertTo(account, tmp);
+                                goto Success;
+                            }
+                        }
+                        if (!tmpCode.IsNullOrWhiteSpace())
+                        {
+                            var loginVo = ByPassword.LoginByTmpCode(username, password, tmpCode);
+                            if (loginVo.LoginStatus == Account.LoginStatusEnum.ByPassword)
+                            {
+                                account = ConvertTo(loginVo);
+                                goto Success;
+                            }
+                        }
                         var needRefresh = true;
-
                         if (ByPassword.IsTokenAvailable(account.AccessToken))
                         {
                             if (account.Expires_AccessToken > DateTime.Now.AddDays(-1))
@@ -78,32 +115,90 @@ namespace web.Controllers
                             else
                             {
                                 var loginVo = ByPassword.LoginByPassword(username, password);
-                                if (loginVo != null && loginVo.LoginStatus == Account.LoginStatusEnum.ByPassword)
-                                    account = ConvertTo(loginVo);
+                                Console.WriteLine(JsonConvert.SerializeObject(loginVo));
+                                if (loginVo != null)
+                                {
+                                    if (loginVo.LoginStatus == Account.LoginStatusEnum.ByPassword)
+                                        account = ConvertTo(loginVo);
+                                    else if (loginVo.LoginStatus == Account.LoginStatusEnum.NeedRisk)
+                                    {
+                                        ret.code = 105;
+                                        ret.url = loginVo.Url;
+                                        return ret;
+                                    }
+                                    else if (loginVo.LoginStatus == Account.LoginStatusEnum.NeedCaptcha)
+                                    {
+                                        //loginVo.Url
+                                        var queryString = HttpUtility.ParseQueryString(new Uri(loginVo.Url).Query);
+                                        ByPassword.LoginByPasswordWithCaptchaV2(queryString["challenge"], queryString["gt"], ref loginVo);
+                                        if (loginVo != null)
+                                        {
+                                            if (loginVo.LoginStatus == Account.LoginStatusEnum.ByPassword)
+                                                account = ConvertTo(loginVo);
+                                            else
+                                            {
+                                                Console.WriteLine(loginVo?.LoginStatus);
+                                                ret.code = 103;
+                                                return ret;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            ret.code = 103;
+                                            return ret;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine(loginVo?.LoginStatus);
+                                        ret.code = 103;
+                                        return ret;
+                                    }
+                                }
                                 else
-                                    return (false, null);
+                                {
+                                    ret.code = 104;
+                                    return ret;
+                                }
                             }
                         }
                     }
+                    Success:
+                    RedisHelper.Set(cacheKey, account);
                 }
-                RedisHelper.Set(cacheKey, account);
             }
             finally
             {
 
             }
-            return (true, account);
+            ret.success = true;
+            ret.accountVo = account;
+            return ret;
         }
 
         [HttpGet("v1/loginex")]
-        public object LoginEx(string username, string password)
+        public object LoginEx(string username, string password, string tmpcode)
         {
-            var (b, accountVo) = LoginBase(username, password, $"account:{username}");
-            if (b)
+            var loginBase = LoginBase(username, password, $"account:{username}", tmpcode);
+            if (loginBase.success)
             {
-                return new { code = 0, data = accountVo };
+                return new { code = 0, data = loginBase.accountVo };
             }
-            return new { code = -101 };
+            return new { code = -101, e = loginBase.code, url = loginBase.url };
+        }
+
+        private Account ConvertTo(AccountVO src)
+        {
+            var target = new Account();
+            var fieldInfos = src.GetType().GetFields();
+            foreach (var propertyInfo in typeof(Account).GetProperties())
+            {
+                var info = fieldInfos.FirstOrDefault(r => r.Name == propertyInfo.Name && r.FieldType == propertyInfo.PropertyType);
+                if (info != null)
+                    if (propertyInfo.CanWrite)
+                        propertyInfo.SetValue(target, info.GetValue(src));
+            }
+            return target;
         }
 
         private AccountVO ConvertTo(Account src)

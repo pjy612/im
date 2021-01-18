@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System;
+using System.Net;
 using aspCore.Extensions;
 using ImCore;
 using Microsoft.AspNetCore.Cors.Infrastructure;
@@ -27,7 +28,7 @@ namespace web
         {
             services.AddOptions();
             services.AddMemoryCache();
-           
+
             services.AddMvc();
             services.AddSwaggerGen(options => { options.SwaggerDoc("v1", new Info()); });
             services.Add(ServiceDescriptor.Transient<ICorsService, WildcardCorsService>());
@@ -84,29 +85,32 @@ namespace web
             app.UseDefaultFiles();
             app.UseStaticFiles();
             app.UseCors("bilibili");
-            
+
             //            app.UseCors("free");
             app.UseMvc();
             app.UseSwagger().UseSwaggerUI(options => { options.SwaggerEndpoint("/swagger/v1/swagger.json", "HKERP API V1"); });
+            
+            //SSL
+            ServicePointManager.ServerCertificateValidationCallback = (sender, certificate, chain, errors) => true;
 
-            string redis = Configuration.GetSection("cfg:redis").Get<string>()         ?? "127.0.0.1:6379,poolsize=5";
-            string[] servers = Configuration.GetSection("cfg:servers").Get<string[]>() ?? new string[] {"bilipush.1024dream.net:7777"};
+            string redis = Configuration.GetSection("cfg:redis").Get<string>() ?? "127.0.0.1:6379,poolsize=5";
+            string[] servers = Configuration.GetSection("cfg:servers").Get<string[]>() ?? new string[] { "bilipush.1024dream.net:7777" };
             RedisHelper.Initialization(new CSRedis.CSRedisClient(redis));
             //RedisHelper.Del("UserMap");
             ImHelper.Initialization(new ImClientOptions
             {
-                Redis   = RedisHelper.Instance,
+                Redis = RedisHelper.Instance,
                 Servers = servers
             });
             ImHelper.Instance.OnSend += (s, e) =>
                 Console.WriteLine($"ImClient.SendMessage(server={e.Server},data={JsonConvert.SerializeObject(e.Message)})");
-            
+
             ImHelper.EventBus(
                 t =>
                 {
-//                    Console.WriteLine(t.clientId + "上线了");
-//                    var onlineUids = ImHelper.GetClientListByOnline();
-//                    ImHelper.SendMessage(t.clientId, onlineUids, $"用户{t.clientId}上线了");
+                    //                    Console.WriteLine(t.clientId + "上线了");
+                    //                    var onlineUids = ImHelper.GetClientListByOnline();
+                    //                    ImHelper.SendMessage(t.clientId, onlineUids, $"用户{t.clientId}上线了");
                 },
                 t =>
                 {
@@ -115,7 +119,7 @@ namespace web
             TimerX.Delay(state =>
             {
                 RoomQueue roomQueue = RoomQueue.Instance;
-            },1000);
+            }, 1000);
             //            TimerX ShowState = new TimerX(state =>
             //                {
             //                    //if (queueLazyValue.RoomNeedLoad.Count > 0 || queueLazyValue.QueueRoomSet.Count > 0 || queueLazyValue.ProcessCollection.Count > 0)

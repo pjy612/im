@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Dynamic;
 using System.Text.RegularExpressions;
 
 #pragma warning disable CS0618
@@ -52,6 +54,28 @@ namespace BiliAccount.Linq
             Core.ByPassword.DoLoginWithCatpcha(Captcha, ref account);
         }
 
+        public static void LoginByPasswordWithCaptchaV2(string challenge, string gt, ref Account account)
+        {
+            Core.ByPassword.TestV3(challenge, gt, ref account);
+        }
+
+        public static Account LoginByTmpCode(string username, string password, string tmpCode)
+        {
+            Account account = new Account()
+            {
+                UserName = username,
+                Password = password
+            };
+            Core.ByPassword.ExchangeCookie(tmpCode, ref account);
+            Core.ByPassword.GetAccessTokenByCsrfToken(ref account);
+            return account;
+        }
+
+        public static void GetAccessTokenByCsrfToken(ref Account account)
+        {
+            Core.ByPassword.GetAccessTokenByCsrfToken(ref account);
+        }
+
         /// <summary>
         /// token续期
         /// </summary>
@@ -59,7 +83,7 @@ namespace BiliAccount.Linq
         /// <param name="refresh_token"></param>
         /// /// <param name="account">账号实例</param>
         /// <returns>到期时间</returns>
-        public static bool RefreshToken(string access_token, string refresh_token,ref Account account)
+        public static bool RefreshToken(string access_token, string refresh_token, ref Account account)
         {
             return Core.ByPassword.RefreshToken(access_token, refresh_token, ref account);
         }

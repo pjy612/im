@@ -51,6 +51,7 @@ namespace BiliAccount
                 using (StreamReader reader = new StreamReader(rep.GetResponseStream()))
                 {
                     result = reader.ReadToEnd();
+                    Console.WriteLine($"url:{url}\nrsp:{result}");
                 }
             }
             finally
@@ -100,6 +101,7 @@ namespace BiliAccount
                 using (StreamReader reader = new StreamReader(rep.GetResponseStream()))
                 {
                     result = reader.ReadToEnd();
+                    Console.WriteLine($"url:{url}\nrsp:{result}");
                 }
 
                 foreach (string i in rep.Headers.GetValues("Set-Cookie"))
@@ -222,6 +224,7 @@ namespace BiliAccount
                 using (StreamReader reader = new StreamReader(rep.GetResponseStream()))
                 {
                     result = reader.ReadToEnd();
+                    Console.WriteLine($"url:{url}\nrsp:{result}");
                 }
             }
             finally
@@ -260,7 +263,7 @@ namespace BiliAccount
 
                 req.Method = "POST";
 
-                if (cookie != null)
+                if (cookie != null && cookie.Count > 0)
                 {
                     req.CookieContainer = new CookieContainer(cookie.Count)
                     {
@@ -283,6 +286,7 @@ namespace BiliAccount
                 using (StreamReader reader = new StreamReader(rep.GetResponseStream()))
                 {
                     result = reader.ReadToEnd();
+                    Console.WriteLine($"url:{url}\nrsp:{result}");
                 }
 
                 if (rep.Headers.GetValues("Set-Cookie") != null && rep.Headers.GetValues("Set-Cookie").Length > 0)

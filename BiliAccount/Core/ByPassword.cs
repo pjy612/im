@@ -1,12 +1,14 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
-
+using Newtonsoft.Json.Linq;
 #if NETSTANDARD2_0 || NETCORE3_0
 using Newtonsoft.Json;
 #else
@@ -83,6 +85,63 @@ namespace BiliAccount.Core
             }
         }
 
+        private static string sortQuery(string query)
+        {
+            string[] strings = query.Split(new[] { '&' });
+            Dictionary<string, string> dict = new Dictionary<string, string>();
+            foreach (string s in strings)
+            {
+                string[] p = s.Split(new[] { '=' });
+                dict.Add(p[0], p[1]);
+            }
+            query = String.Join("&", dict.OrderBy(r => r.Key).Select(r => $"{r.Key}={r.Value}").ToList());
+            return query;
+        }
+        public static void TestV3(string challenge, string gt, ref Account account)
+        {
+            var postBody = Http.PostBody($@"http://175.24.76.74:2233/api", $"challenge={challenge}&gt={gt}");
+            if (!string.IsNullOrWhiteSpace(postBody))
+            {
+                var v3Obj = JsonConvert.DeserializeObject<V3Obj>(postBody);
+                if (v3Obj.success == 1)
+                {
+                    //string parm = "actionKey=" + Config.Instance.Appkey + "&appkey=" + Config.Instance.Appkey + "&build=" + Config.Instance.Build + "&challenge=" + v3Obj.challenge + "&mobi_app=android&password=" + account.EncryptedPassword + $"&device=android&platform=android&seccode={v3Obj.validate}%7Cjordan&ts=" + TimeStamp + "&username=" + account.UserName+$"&validate={v3Obj.validate}";
+                    string parm = $"appkey={Config.Instance.Appkey}&bili_local_id={account.DeviceId}&build={Config.Instance.Build}&buvid={account.Buvid}&challenge={v3Obj.challenge}&channel=bili&device=phone&device_id={account.DeviceId}&device_name=BiliAccount{account.DeviceGuid}&device_platform=BiliAccount{Assembly.GetExecutingAssembly().GetName().Version}&local_id={account.Buvid}&mobi_app=android&password={account.EncryptedPassword}&platform=android&seccode={v3Obj.validate}%7Cjordan&statistics=%7B%22appId%22%3A1%2C%22platform%22%3A3%2C%22version%22%3A%22{Config.Instance.Version}%22%2C%22abtest%22%3A%22%22%7D&ts={TimeStamp}&username={account.UserName}&validate={v3Obj.validate}";
+                    Console.WriteLine("old:" + parm);
+                    parm = sortQuery(parm);
+                    Console.WriteLine("new:" + parm);
+                    parm += "&sign=" + GetSign(parm);
+                    string str = Http.PostBodyOutCookies("http://passport.bilibili.com/api/v3/oauth2/login", out account.Cookies, parm, account.Cookies, "application/x-www-form-urlencoded;charset=utf-8", "", Config.Instance.User_Agent);
+                    if (!string.IsNullOrEmpty(str))
+                    {
+#if NETSTANDARD2_0 || NETCORE3_0
+                        DoLogin_DataTemplete obj = JsonConvert.DeserializeObject<DoLogin_DataTemplete>(str);
+#else
+                DoLogin_DataTemplete obj = (new JavaScriptSerializer()).Deserialize<DoLogin_DataTemplete>(str);
+#endif
+                        switch (obj.code)
+                        {
+                            case 0: //登录成功
+                                LoginSuccess(obj, ref account);
+                                break;
+
+                            case -105: //验证码错误
+                                account.Url = obj.data.url;
+                                account.LoginStatus = Account.LoginStatusEnum.NeedCaptcha;
+                                break;
+
+                            case -629: //密码错误
+                                account.LoginStatus = Account.LoginStatusEnum.WrongPassword;
+                                break;
+
+                            default:
+                                account.LoginStatus = Account.LoginStatusEnum.None;
+                                break;
+                        }
+                    }
+                }
+            }
+        }
         /// <summary>
         /// 登录（带验证码。在当前版本api中已鲜见图片验证码，该方法已弃用。）
         /// </summary>
@@ -271,6 +330,62 @@ namespace BiliAccount.Core
             else
                 account = new Account();
         }
+        public static void ExchangeCookie(string tmpcode, ref Account account)
+        {
+            HttpWebRequest req = null;
+            HttpWebResponse rep = null;
+            string cookies = "", csrf_token = "";
+            CookieCollection cookiesC = new CookieCollection();
+            DateTime expires = new DateTime();
+            try
+            {
+                req = (HttpWebRequest)WebRequest.Create($"https://passport.bilibili.com/web/sso/exchange_cookie?code={tmpcode}");
+                req.AllowAutoRedirect = false;
+                req.UserAgent = Config.Instance.User_Agent;
+                rep = (HttpWebResponse)req.GetResponse();
+
+                foreach (string i in rep.Headers.GetValues("Set-Cookie"))
+                {
+                    string[] tmp = i.Split(';');
+                    string[] tmp2 = tmp[0].Split('=');
+
+                    cookies += tmp[0] + "; ";
+                    cookiesC.Add(new Cookie(tmp2[0], tmp2[1]) { Domain = ".bilibili.com" });
+                    expires = DateTime.Parse(tmp[2].Split('=')[1]);
+
+                    if (tmp2[0] == "bili_jct")
+                        csrf_token = tmp2[1];
+                }
+                cookies = cookies.Substring(0, cookies.Length - 2);
+            }
+            catch (WebException webException)
+            {
+                rep = (HttpWebResponse)webException.Response;
+                foreach (string i in rep.Headers.GetValues("Set-Cookie"))
+                {
+                    string[] tmp = i.Split(';');
+                    string[] tmp2 = tmp[0].Split('=');
+
+                    cookies += tmp[0] + "; ";
+                    cookiesC.Add(new Cookie(tmp2[0], tmp2[1]) { Domain = ".bilibili.com" });
+                    expires = DateTime.Parse(tmp[2].Split('=')[1]);
+
+                    if (tmp2[0] == "bili_jct")
+                        csrf_token = tmp2[1];
+                }
+                cookies = cookies.Substring(0, cookies.Length - 2);
+            }
+            finally
+            {
+                if (rep != null) rep.Close();
+                if (req != null) req.Abort();
+            }
+            account.Cookies = cookiesC;
+            account.Expires_Cookies = expires;
+            account.CsrfToken = csrf_token;
+            account.strCookies = cookies;
+            account.LoginStatus = Account.LoginStatusEnum.NeedAccessToken;
+        }
 
         /// <summary>
         /// SSO
@@ -407,6 +522,11 @@ namespace BiliAccount.Core
                     account.Tel = match.Value.Substring(5, match.Value.Length - 6);
                     account.Url = obj.data.url;
                     account.LoginStatus = Account.LoginStatusEnum.NeedTelVerify;
+                    break;
+                case 2://验证
+
+                    account.Url = obj.data.url;
+                    account.LoginStatus = Account.LoginStatusEnum.NeedRisk;
                     break;
 
                 case 3://设备登录验证
@@ -637,5 +757,106 @@ namespace BiliAccount.Core
         }
 
         #endregion Private Classes
+
+        public class V3Obj
+        {
+            public int success;
+            public string challenge;
+            public string validate;
+        }
+        public static string RandomID(int length)
+        {
+            var random = new Random();
+            const string words = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+            var randomID = "";
+            randomID += words[(int)Math.Floor(random.NextDouble() * (words.Length - 1)) + 1];
+            for (var i = 0; i < length - 1; i++)
+                randomID += words[(int)Math.Floor(random.NextDouble() * words.Length)];
+            return randomID;
+        }
+        public static void GetAccessTokenByCsrfToken(ref Account account)
+        {
+            var BilibiliToken = new
+            {
+                __loginSecretKey = "59b43e04ad6965f34319062b478f83dd",
+                loginAppKey = "4409e2ce8ffd12b8",
+                __secretKey = "560c52ccd288fed045859ed18bffd973",
+                appKey = "1d8b6e7d45233436",
+                build = "102401",
+                channel = "master",
+                device = "Sony",
+                deviceName = "J9110",
+                devicePlatform = "Android10SonyJ9110",
+                mobiApp = "android_tv_yst",
+                networkstate = "wifi",
+                platform = "android",
+            };
+            WebHeaderCollection headers = new WebHeaderCollection()
+            {
+                {"User-Agent","Mozilla/5.0 BiliTV/1.2.4.1 (bbcallen@gmail.com)"},
+                {"buvid",account.Buvid},
+                {"app-key","android_tv_yst"},
+            };
+            var tmp = account;
+            Func<string> authCodeFunc = () =>
+            {
+                var bili_local_id = tmp.DeviceId;
+                var buvid = tmp.Buvid;
+                var fingerprint = RandomID(62);
+                string parm = $"appkey={BilibiliToken.loginAppKey}&bili_local_id={bili_local_id}&build={BilibiliToken.build}&buvid={buvid}&channel={BilibiliToken.channel}&device={bili_local_id}&device_id={bili_local_id}&device_name={BilibiliToken.deviceName}&device_platform={BilibiliToken.devicePlatform}&fingerprint={fingerprint}&guid={buvid}&local_fingerprint={fingerprint}&local_id={buvid}&mobi_app={BilibiliToken.mobiApp}&networkstate={BilibiliToken.networkstate}&platform={BilibiliToken.platform}&ts={TimeStamp}";
+                parm = sortQuery(parm);
+                parm += "&sign=" + GetMD5(parm + BilibiliToken.__loginSecretKey);
+                var postBody = Http.PostBody("https://passport.bilibili.com/x/passport-tv-login/qrcode/auth_code", parm, specialheaders: headers);
+                var o = JsonConvert.DeserializeObject<JObject>(postBody);
+                if (o["code"].Value<int>() == 0)
+                {
+                    return o["data"]?["auth_code"]?.Value<string>();
+                }
+                return "";
+            };
+            Func<string, string, bool> confirmFunc = (string auth_code,string csrf) =>
+            {
+                string parm = $"auth_code={auth_code}&csrf={csrf}";
+                var postBody = Http.PostBody("https://passport.bilibili.com/x/passport-tv-login/h5/qrcode/confirm", parm, tmp.Cookies, specialheaders: headers);
+                var o = JsonConvert.DeserializeObject<JObject>(postBody);
+                if (o["code"].Value<int>() == 0)
+                {
+                    return o["data"]?["gourl"] != null;
+                }
+                return false;
+            };
+            Func<string, DoLogin_DataTemplete.Data_Templete.Token_Info_Templete> pollFunc = (string auth_code) =>
+            {
+                var bili_local_id = tmp.DeviceId;
+                var buvid = tmp.Buvid;
+                var fingerprint = RandomID(62);
+                string parm = $"appkey={BilibiliToken.loginAppKey}&auth_code={auth_code}&bili_local_id={bili_local_id}&build={BilibiliToken.build}&buvid={buvid}&channel={BilibiliToken.channel}&device={bili_local_id}&device_id={bili_local_id}&device_name={BilibiliToken.deviceName}&device_platform={BilibiliToken.devicePlatform}&fingerprint={fingerprint}&guid={buvid}&local_fingerprint={fingerprint}&local_id={buvid}&mobi_app={BilibiliToken.mobiApp}&networkstate={BilibiliToken.networkstate}&platform={BilibiliToken.platform}&ts={TimeStamp}";
+                parm = sortQuery(parm);
+                parm += "&sign=" + GetMD5(parm + BilibiliToken.__loginSecretKey);
+                var postBody = Http.PostBody("https://passport.bilibili.com/x/passport-tv-login/qrcode/poll", parm, specialheaders: headers);
+                var o = JsonConvert.DeserializeObject<JObject>(postBody);
+                if (o["code"].Value<int>() == 0)
+                {
+                    return o["data"].ToObject<DoLogin_DataTemplete.Data_Templete.Token_Info_Templete>();
+                }
+                return null;
+            };
+            var authCode = authCodeFunc();
+            if (!string.IsNullOrWhiteSpace(authCode))
+            {
+                var confirmSuccess = confirmFunc(authCode,account.CsrfToken);
+                if (confirmSuccess)
+                {
+                    DoLogin_DataTemplete.Data_Templete.Token_Info_Templete tokenInfoTemplete = pollFunc(authCode);
+                    if (tokenInfoTemplete != null)
+                    {
+                        account.AccessToken = tokenInfoTemplete.access_token;
+                        account.RefreshToken = tokenInfoTemplete.refresh_token;
+                        account.Expires_AccessToken = DateTime.Parse("1970-01-01 08:00:00").AddSeconds(TimeStamp + tokenInfoTemplete.expires_in);
+                        account.LoginStatus = Account.LoginStatusEnum.ByPassword;
+                    }
+                }
+            }
+        }
     }
 }
