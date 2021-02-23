@@ -850,6 +850,7 @@ namespace BiliAccount.Core
                     DoLogin_DataTemplete.Data_Templete.Token_Info_Templete tokenInfoTemplete = pollFunc(authCode);
                     if (tokenInfoTemplete != null)
                     {
+                        account.Uid = tokenInfoTemplete.mid;
                         account.AccessToken = tokenInfoTemplete.access_token;
                         account.RefreshToken = tokenInfoTemplete.refresh_token;
                         account.Expires_AccessToken = DateTime.Parse("1970-01-01 08:00:00").AddSeconds(TimeStamp + tokenInfoTemplete.expires_in);

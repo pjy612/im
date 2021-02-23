@@ -32,7 +32,7 @@ namespace BiliAccount
             try
             {
                 req = (HttpWebRequest)WebRequest.Create(url);
-
+                req.Proxy = null;
                 if (specialheaders != null) req.Headers = specialheaders;
 
                 if (cookie != null)
@@ -82,7 +82,7 @@ namespace BiliAccount
             try
             {
                 req = (HttpWebRequest)WebRequest.Create(url);
-
+                req.Proxy = null;
                 if (specialheaders != null) req.Headers = specialheaders;
 
                 if (cookie != null)
@@ -140,7 +140,7 @@ namespace BiliAccount
             try
             {
                 req = (HttpWebRequest)WebRequest.Create(url);
-
+                req.Proxy = null;
                 if (specialheaders != null) req.Headers = specialheaders;
 
                 if (cookie != null)
@@ -196,7 +196,7 @@ namespace BiliAccount
             try
             {
                 req = (HttpWebRequest)WebRequest.Create(url);
-
+                req.Proxy = null;
                 if (specialheaders != null) req.Headers = specialheaders;
 
                 req.Method = "POST";
@@ -258,7 +258,7 @@ namespace BiliAccount
             try
             {
                 req = (HttpWebRequest)WebRequest.Create(url);
-
+                req.Proxy = null;
                 if (specialheaders != null) req.Headers = specialheaders;
 
                 req.Method = "POST";

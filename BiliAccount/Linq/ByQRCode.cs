@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Text.RegularExpressions;
 
@@ -149,7 +150,7 @@ namespace BiliAccount.Linq
         /// <exception cref="Exceptions.InvalidColorValue">传入了错误的颜色值</exception>
         public static Bitmap LoginByQrCode(System.Drawing.Color Foreground, System.Drawing.Color Background, bool IsBorderVisable = false)
         {
-            if(Foreground != Background)
+            if (Foreground != Background)
                 return Core.ByQRCode.GetQrcode(Foreground, Background, IsBorderVisable);
             else
                 throw new Exceptions.InvalidColorValue("strForeground and strBackground can not be same!");

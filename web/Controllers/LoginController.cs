@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Reflection;
@@ -21,6 +24,36 @@ namespace web.Controllers
     [Route("login")]
     public class LoginController : Controller
     {
+        public LoginController()
+        {
+            ByQRCode.QrCodeStatus_Changed += ByQRCode_QrCodeStatus_Changed;
+        }
+        private void ByQRCode_QrCodeStatus_Changed(ByQRCode.QrCodeStatus status, Account account = null)
+        {
+            if (status == ByQRCode.QrCodeStatus.Success)
+            {
+                if (account != null && account.AccessToken.IsNullOrWhiteSpace())
+                {
+                    ByPassword.GetAccessTokenByCsrfToken(ref account);
+                    if (account.LoginStatus == Account.LoginStatusEnum.ByPassword)
+                    {
+                        var accountVO = ConvertTo(account);
+                        accountVO.QrCode = true;
+                        if (accountVO.Uid.IsNullOrWhiteSpace())
+                        {
+                            Cookie cookie = accountVO.Cookies.FirstOrDefault(r => r.Name == "DedeUserID");
+                            accountVO.Uid = cookie?.Value;
+                        }
+                        string username = RedisHelper.Get($"B_{account.Uid}");
+                        if (!username.IsNullOrWhiteSpace())
+                        {
+                            RedisHelper.Set($"account:{username}", accountVO);
+                        }
+                    }
+                }
+            }
+        }
+
         public string Ip => this.Request.Headers["X-Real-IP"].FirstOrDefault() ?? this.Request.HttpContext.Connection.RemoteIpAddress.MapToIPv4().ToString();
         [HttpGet("v1/login")]
         public object Login(string username, string password, string tmpcode = null)
@@ -66,7 +99,7 @@ namespace web.Controllers
                 }
                 else
                 {
-                    if (account.Password != password)
+                    if (account.Password != password && account.QrCode == false)
                     {
                         var loginVo = ByPassword.LoginByPassword(username, password);
                         if (loginVo != null && loginVo.LoginStatus == Account.LoginStatusEnum.ByPassword)
@@ -79,6 +112,11 @@ namespace web.Controllers
                     }
                     else
                     {
+                        if (account.Uid.IsNullOrWhiteSpace())
+                        {
+                            Cookie cookie = account.Cookies.FirstOrDefault(r => r.Name == "DedeUserID");
+                            account.Uid = cookie?.Value;
+                        }
                         if (account.AccessToken.IsNullOrWhiteSpace())
                         {
                             Account tmp = ConvertTo(account);
@@ -163,7 +201,7 @@ namespace web.Controllers
                             }
                         }
                     }
-                    Success:
+                Success:
                     RedisHelper.Set(cacheKey, account);
                 }
             }
@@ -186,7 +224,26 @@ namespace web.Controllers
             }
             return new { code = -101, e = loginBase.code, url = loginBase.url };
         }
-
+        [HttpGet("v1/loginQrcode")]
+        public object LoginQrcode(string username = "", int uid = 0)
+        {
+            if (uid > 0 && !username.IsNullOrWhiteSpace())
+            {
+                RedisHelper.Set($"B_{uid}", username);
+            }
+            Bitmap loginByQrCode = ByQRCode.LoginByQrCode(IsBorderVisable: true);
+            using (MemoryStream ms = new MemoryStream())
+            {
+                loginByQrCode.Save(ms, ImageFormat.Jpeg);
+                return new FileContentResult(ms.ToArray(), "image/png");
+            }
+            //            var loginBase = LoginBase(username, password, $"account:{username}", tmpcode);
+            //            if (loginBase.success)
+            //            {
+            //                return new { code = 0, data = loginBase.accountVo };
+            //            }
+            //            return new { code = -101, e = loginBase.code, url = loginBase.url };
+        }
         private Account ConvertTo(AccountVO src)
         {
             var target = new Account();
@@ -308,5 +365,7 @@ namespace web.Controllers
                 return tmp;
             }
         }
+
+        public bool QrCode { get; set; }
     }
 }
