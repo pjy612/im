@@ -15,6 +15,7 @@ using BiliAccount.Linq;
 using CSRedis;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.TagHelpers.Cache;
+using NewLife.Log;
 using NewLife.Reflection;
 using NewLife.Serialization;
 using Newtonsoft.Json;
@@ -201,9 +202,13 @@ namespace web.Controllers
                             }
                         }
                     }
-                Success:
+                    Success:
                     RedisHelper.Set(cacheKey, account);
                 }
+            }
+            catch(Exception ex)
+            {
+                XTrace.WriteException(ex);
             }
             finally
             {
