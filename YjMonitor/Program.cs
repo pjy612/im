@@ -333,17 +333,17 @@ namespace YjMonitor
                     }
                 }
             });
-            new TimerX(state =>
-            {
-                try
-                {
-                    PollWestApi();
-                }
-                catch (Exception e)
-                {
-                    XTrace.WriteException(e);
-                }
-            }, null, 1000, 10_000);
+            // new TimerX(state =>
+            // {
+            //     try
+            //     {
+            //         PollWestApi();
+            //     }
+            //     catch (Exception e)
+            //     {
+            //         XTrace.WriteException(e);
+            //     }
+            // }, null, 1000, 10_000);
             YjClient yjClient = new YjClient(JsonConfig<YjMonitorConfig>.Current.Address, JsonConfig<YjMonitorConfig>.Current.Key);
             yjClient.OnReceived = (s, e) =>
             {
